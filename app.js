@@ -10,28 +10,28 @@
   ];
   var TIPO_NAMES = ['Influenciadores','Encartes'];
   var TIPO_DEFAULT_RATES = [
-    [15000,450,20000,800,15000],
-    [8000,120,12000,300,8000]
+    [0,0,0,0,0],
+    [0,0,0,0,0]
   ];
   var INFL_DEFAULT_RATES = [
-    [16476,169,18115,617,10803],
-    [7824,512,9212,602,19588],
-    [6409,112,14231,868,16299],
-    [18149,110,22848,520,16133],
-    [10506,175,20149,1076,20507],
-    [10012,303,18105,294,20118],
-    [9657,318,14094,997,11925],
-    [8286,597,16055,720,15459],
-    [18066,107,20029,799,9150],
-    [7679,283,12349,377,17543],
-    [17087,509,12039,637,7139],
-    [18135,305,21449,330,6750],
-    [20617,539,12169,815,16834]
+    [0,0,0,0,0],
+    [0,0,0,0,0],
+    [0,0,0,0,0],
+    [0,0,0,0,0],
+    [0,0,0,0,0],
+    [0,0,0,0,0],
+    [0,0,0,0,0],
+    [0,0,0,0,0],
+    [0,0,0,0,0],
+    [0,0,0,0,0,
+    [0,0,0,0,0],
+    [0,0,0,0,0],
+    [0,0,0,0,0]
   ];
   var DEFAULT_WEIGHTS = [1,1,1,1,1];
-  var DEFAULT_BUDGET = 4500;
-  var DEFAULT_CAP_TIPOS = 60;
-  var DEFAULT_CAP_INFL = 20;
+  var DEFAULT_BUDGET = 0;
+  var DEFAULT_CAP_TIPOS = 0;
+  var DEFAULT_CAP_INFL = 0;
 
   var fmtMoney = function(n){ return 'R$ ' + (n||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}); };
   var fmtNum = function(n){ return ((n||0)/1000).toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:1}) + ' mil'; };
