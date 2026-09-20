@@ -329,6 +329,16 @@
     updateCapNotes();
   });
 
+  function currentTiposResult(){
+    var weights = METRICS.map(function(_,i){ return parseFloat(document.getElementById('weight-'+i).value) || 0; });
+    var tiposRates = TIPO_NAMES.map(function(_,r){ return METRICS.map(function(_,c){ return parseFloat(document.getElementById('tipo-'+r+'-'+c).value) || 0; }); });
+    var budget = parseFloat(document.getElementById('budget').value) || 0;
+    var mode = document.getElementById('capTiposMode').value;
+    var raw = parseFloat(document.getElementById('capTipos').value) || 0;
+    var pct = mode === 'valor' ? (budget > 0 ? (raw/budget*100) : 0) : raw;
+    return computeAllocation(TIPO_NAMES, tiposRates, weights, budget, pct);
+  }
+
   function updateCapNotes(){
     var budget = parseFloat(document.getElementById('budget').value) || 0;
     var mode = document.getElementById('capTiposMode').value;
@@ -340,8 +350,9 @@
     document.getElementById('capTiposNote').textContent = noteTipos;
 
     var nInfl = Math.min(Math.max(parseInt(document.getElementById('capInfl').value,10) || 5, 1), 13);
-    var valInfl = nInfl > 0 ? budget / nInfl : 0;
-    document.getElementById('capInflNote').textContent = 'Os ' + nInfl + ' melhores influenciadores recebem até ' + fmtMoney(valInfl) + ' cada — usa 100% do orçamento, concentrado em quem performa melhor.';
+    var inflBudget = currentTiposResult().alloc[0];
+    var valInfl = nInfl > 0 ? inflBudget / nInfl : 0;
+    document.getElementById('capInflNote').textContent = 'Os ' + nInfl + ' melhores influenciadores recebem até ' + fmtMoney(valInfl) + ' cada, dividindo a verba de ' + fmtMoney(inflBudget) + ' que o Modelo A destina a "Influenciadores".';
   }
   ['budget','capTipos','capInfl'].forEach(function(id){
     document.getElementById(id).addEventListener('input', updateCapNotes);
@@ -371,9 +382,10 @@
   }
 
   // ---------- results rendering ----------
-  function renderResultBlock(containerId, title, names, result, colorClass){
+  function renderResultBlock(containerId, title, names, result, colorClass, subtitle){
     var maxAlloc = Math.max.apply(null, result.alloc.concat([1]));
     var html = '<div class="result-head"><h2>' + title + '</h2><div style="text-align:right"><div class="obj">' + fmtNum(result.objective) + '</div><div class="obj-label">total ponderado</div></div></div>';
+    if(subtitle){ html += '<div class="hint" style="margin-top:-6px;margin-bottom:10px;">' + subtitle + '</div>'; }
     if(result.unallocated > 0.5){
       html += '<div class="warn">Teto de diversificação impede alocar ' + fmtMoney(result.unallocated) + ' do orçamento. Aumente o teto ou o número de opções para usar o valor inteiro.</div>';
     }
@@ -389,9 +401,11 @@
 
   function calcAndShow(data){
     var resTipos = computeAllocation(data.tiposNomes, data.tiposRates, data.weights, data.budget, tiposCapPct(data));
-    var resInfl = computeAllocation(data.inflNomes, data.inflRates, data.weights, data.budget, data.capInfl);
+    var inflBudget = resTipos.alloc[0]; // verba que o Modelo A destinou ao tipo "Influenciadores"
+    var resInfl = computeAllocation(data.inflNomes, data.inflRates, data.weights, inflBudget, data.capInfl);
     renderResultBlock('resultTipos', 'Modelo A — Influenciadores × Encartes', data.tiposNomes, resTipos, true);
-    renderResultBlock('resultInfl', 'Modelo B — 13 influenciadores', data.inflNomes, resInfl, false);
+    renderResultBlock('resultInfl', 'Modelo B — 13 influenciadores', data.inflNomes, resInfl, false,
+      'Divide apenas a verba que o Modelo A destinou a "Influenciadores": ' + fmtMoney(inflBudget) + '.');
     return {tipos: resTipos, infl: resInfl};
   }
 
@@ -577,7 +591,7 @@
     docs.forEach(function(d){
       var data = d.data;
       var rT = computeAllocation(data.tiposNomes, data.tiposRates, data.weights, data.budget, tiposCapPct(data));
-      var rI = computeAllocation(data.inflNomes, data.inflRates, data.weights, data.budget, data.capInfl);
+      var rI = computeAllocation(data.inflNomes, data.inflRates, data.weights, rT.alloc[0], data.capInfl);
       objTipos.push(rT.objective); objInfl.push(rI.objective);
       allocTipos0.push(rT.alloc[0]); allocTipos1.push(rT.alloc[1]);
     });
@@ -598,7 +612,8 @@
       tableHtml += '<tr><td>' + name + '</td>';
       docs.forEach(function(d){
         var data = d.data;
-        var r = computeAllocation(data.inflNomes, data.inflRates, data.weights, data.budget, data.capInfl);
+        var rTd = computeAllocation(data.tiposNomes, data.tiposRates, data.weights, data.budget, tiposCapPct(data));
+        var r = computeAllocation(data.inflNomes, data.inflRates, data.weights, rTd.alloc[0], data.capInfl);
         tableHtml += '<td>' + fmtMoney(r.alloc[idx]||0) + '</td>';
       });
       tableHtml += '</tr>';
