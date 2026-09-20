@@ -30,7 +30,8 @@
   ];
   var DEFAULT_WEIGHTS = [1,1,1,1,1];
   var DEFAULT_BUDGET = 4500;
-  var DEFAULT_CAP_TIPOS = 50;
+  var DEFAULT_CAP_TIPOS_MODE = 'pct';
+  var DEFAULT_CAP_TIPOS_RAW = 50;
   var DEFAULT_CAP_INFL = 20;
 
   var fmtMoney = function(n){ return 'R$ ' + (n||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}); };
@@ -258,7 +259,8 @@
       label: monthKeyToLabel(key),
       budget: DEFAULT_BUDGET,
       weights: DEFAULT_WEIGHTS.slice(),
-      capTipos: DEFAULT_CAP_TIPOS,
+      capTiposMode: DEFAULT_CAP_TIPOS_MODE,
+      capTiposRaw: DEFAULT_CAP_TIPOS_RAW,
       capInfl: DEFAULT_CAP_INFL,
       tiposNomes: TIPO_NAMES.slice(),
       tiposRates: TIPO_DEFAULT_RATES.map(function(r){ return r.slice(); }),
@@ -267,10 +269,21 @@
     };
   }
 
+  function tiposCapPct(data){
+    if(data.capTiposMode === 'valor'){
+      return data.budget > 0 ? (data.capTiposRaw / data.budget * 100) : 0;
+    }
+    if(data.capTiposRaw != null) return data.capTiposRaw;
+    return data.capTipos != null ? data.capTipos : 50; // compatibilidade com meses salvos antes desta versão
+  }
+
   function loadDataIntoForm(data){
     document.getElementById('monthLabel').value = data.label || '';
     document.getElementById('budget').value = data.budget;
-    document.getElementById('capTipos').value = Math.max(1, Math.round(100/Math.max(data.capTipos,1)));
+    var mode = data.capTiposMode || 'pct';
+    document.getElementById('capTiposMode').value = mode;
+    document.getElementById('capTipos').value = data.capTiposRaw != null ? data.capTiposRaw : (data.capTipos != null ? data.capTipos : 50);
+    updateCapTiposLabel();
     document.getElementById('capInfl').value = Math.max(1, Math.round(100/Math.max(data.capInfl,1)));
     data.weights.forEach(function(w,i){ document.getElementById('weight-'+i).value = w; });
     data.tiposRates.forEach(function(row,r){ row.forEach(function(v,c){ document.getElementById('tipo-'+r+'-'+c).value = v; }); });
@@ -289,7 +302,8 @@
       label: document.getElementById('monthLabel').value || monthKeyToLabel(key),
       budget: parseFloat(document.getElementById('budget').value) || 0,
       weights: weights,
-      capTipos: 100 / Math.min(Math.max(parseInt(document.getElementById('capTipos').value,10) || 2, 1), 2),
+      capTiposMode: document.getElementById('capTiposMode').value,
+      capTiposRaw: parseFloat(document.getElementById('capTipos').value) || 0,
       capInfl: 100 / Math.min(Math.max(parseInt(document.getElementById('capInfl').value,10) || 5, 1), 13),
       tiposNomes: TIPO_NAMES.slice(),
       tiposRates: tiposRates,
@@ -298,13 +312,35 @@
     };
   }
 
+  function updateCapTiposLabel(){
+    var mode = document.getElementById('capTiposMode').value;
+    document.getElementById('capTiposValueLabel').textContent = mode === 'valor' ? 'Teto por tipo (R$)' : 'Teto por tipo (%)';
+  }
+  document.getElementById('capTiposMode').addEventListener('change', function(){
+    var budget = parseFloat(document.getElementById('budget').value) || 0;
+    var input = document.getElementById('capTipos');
+    var current = parseFloat(input.value) || 0;
+    if(this.value === 'valor'){
+      input.value = budget > 0 ? Math.round(budget * current/100) : current; // estava em %, converte para R$
+    } else {
+      input.value = budget > 0 ? Math.round(current / budget * 100) : current; // estava em R$, converte para %
+    }
+    updateCapTiposLabel();
+    updateCapNotes();
+  });
+
   function updateCapNotes(){
     var budget = parseFloat(document.getElementById('budget').value) || 0;
-    var nTipos = Math.min(Math.max(parseInt(document.getElementById('capTipos').value,10) || 2, 1), 2);
+    var mode = document.getElementById('capTiposMode').value;
+    var raw = parseFloat(document.getElementById('capTipos').value) || 0;
+    var pctTipos = mode === 'valor' ? (budget > 0 ? (raw/budget*100) : 0) : raw;
+    var valTipos = mode === 'valor' ? raw : (budget * raw/100);
+    var noteTipos = 'até ' + fmtMoney(valTipos) + ' por tipo (' + pctTipos.toFixed(0) + '% do orçamento)';
+    if(pctTipos < 50) noteTipos += ' · abaixo de 50%, com só 2 tipos, pode sobrar orçamento sem alocar.';
+    document.getElementById('capTiposNote').textContent = noteTipos;
+
     var nInfl = Math.min(Math.max(parseInt(document.getElementById('capInfl').value,10) || 5, 1), 13);
-    var valTipos = nTipos > 0 ? budget / nTipos : 0;
     var valInfl = nInfl > 0 ? budget / nInfl : 0;
-    document.getElementById('capTiposNote').textContent = 'Os ' + nTipos + ' melhor(es) tipo(s) recebem até ' + fmtMoney(valTipos) + ' cada — usa 100% do orçamento, concentrado em quem performa melhor.';
     document.getElementById('capInflNote').textContent = 'Os ' + nInfl + ' melhores influenciadores recebem até ' + fmtMoney(valInfl) + ' cada — usa 100% do orçamento, concentrado em quem performa melhor.';
   }
   ['budget','capTipos','capInfl'].forEach(function(id){
@@ -352,7 +388,7 @@
   }
 
   function calcAndShow(data){
-    var resTipos = computeAllocation(data.tiposNomes, data.tiposRates, data.weights, data.budget, data.capTipos);
+    var resTipos = computeAllocation(data.tiposNomes, data.tiposRates, data.weights, data.budget, tiposCapPct(data));
     var resInfl = computeAllocation(data.inflNomes, data.inflRates, data.weights, data.budget, data.capInfl);
     renderResultBlock('resultTipos', 'Modelo A — Influenciadores × Encartes', data.tiposNomes, resTipos, true);
     renderResultBlock('resultInfl', 'Modelo B — 13 influenciadores', data.inflNomes, resInfl, false);
@@ -540,7 +576,7 @@
     var objTipos = [], objInfl = [], allocTipos0 = [], allocTipos1 = [];
     docs.forEach(function(d){
       var data = d.data;
-      var rT = computeAllocation(data.tiposNomes, data.tiposRates, data.weights, data.budget, data.capTipos);
+      var rT = computeAllocation(data.tiposNomes, data.tiposRates, data.weights, data.budget, tiposCapPct(data));
       var rI = computeAllocation(data.inflNomes, data.inflRates, data.weights, data.budget, data.capInfl);
       objTipos.push(rT.objective); objInfl.push(rI.objective);
       allocTipos0.push(rT.alloc[0]); allocTipos1.push(rT.alloc[1]);
