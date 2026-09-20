@@ -30,7 +30,7 @@
   ];
   var DEFAULT_WEIGHTS = [1,1,1,1,1];
   var DEFAULT_BUDGET = 4500;
-  var DEFAULT_CAP_TIPOS = 60;
+  var DEFAULT_CAP_TIPOS = 50;
   var DEFAULT_CAP_INFL = 20;
 
   var fmtMoney = function(n){ return 'R$ ' + (n||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}); };
@@ -270,8 +270,8 @@
   function loadDataIntoForm(data){
     document.getElementById('monthLabel').value = data.label || '';
     document.getElementById('budget').value = data.budget;
-    document.getElementById('capTipos').value = data.capTipos;
-    document.getElementById('capInfl').value = data.capInfl;
+    document.getElementById('capTipos').value = Math.max(1, Math.round(100/Math.max(data.capTipos,1)));
+    document.getElementById('capInfl').value = Math.max(1, Math.round(100/Math.max(data.capInfl,1)));
     data.weights.forEach(function(w,i){ document.getElementById('weight-'+i).value = w; });
     data.tiposRates.forEach(function(row,r){ row.forEach(function(v,c){ document.getElementById('tipo-'+r+'-'+c).value = v; }); });
     data.inflNomes.forEach(function(n,r){ document.getElementById('infl-name-'+r).value = n; });
@@ -289,8 +289,8 @@
       label: document.getElementById('monthLabel').value || monthKeyToLabel(key),
       budget: parseFloat(document.getElementById('budget').value) || 0,
       weights: weights,
-      capTipos: parseFloat(document.getElementById('capTipos').value) || 100,
-      capInfl: parseFloat(document.getElementById('capInfl').value) || 100,
+      capTipos: 100 / Math.min(Math.max(parseInt(document.getElementById('capTipos').value,10) || 2, 1), 2),
+      capInfl: 100 / Math.min(Math.max(parseInt(document.getElementById('capInfl').value,10) || 5, 1), 13),
       tiposNomes: TIPO_NAMES.slice(),
       tiposRates: tiposRates,
       inflNomes: inflNomes,
@@ -300,12 +300,12 @@
 
   function updateCapNotes(){
     var budget = parseFloat(document.getElementById('budget').value) || 0;
-    var capTipos = parseFloat(document.getElementById('capTipos').value) || 0;
-    var capInfl = parseFloat(document.getElementById('capInfl').value) || 0;
-    var capTiposVal = budget * capTipos/100;
-    var capInflVal = budget * capInfl/100;
-    document.getElementById('capTiposNote').textContent = 'até ' + fmtMoney(capTiposVal) + ' por tipo · mínimo de ' + Math.ceil(100/Math.max(capTipos,1)) + ' tipo(s) para usar o orçamento inteiro';
-    document.getElementById('capInflNote').textContent = 'até ' + fmtMoney(capInflVal) + ' por influenciador · mínimo de ' + Math.ceil(100/Math.max(capInfl,1)) + ' influenciador(es) para usar o orçamento inteiro';
+    var nTipos = Math.min(Math.max(parseInt(document.getElementById('capTipos').value,10) || 2, 1), 2);
+    var nInfl = Math.min(Math.max(parseInt(document.getElementById('capInfl').value,10) || 5, 1), 13);
+    var valTipos = nTipos > 0 ? budget / nTipos : 0;
+    var valInfl = nInfl > 0 ? budget / nInfl : 0;
+    document.getElementById('capTiposNote').textContent = 'Os ' + nTipos + ' melhor(es) tipo(s) recebem até ' + fmtMoney(valTipos) + ' cada — usa 100% do orçamento, concentrado em quem performa melhor.';
+    document.getElementById('capInflNote').textContent = 'Os ' + nInfl + ' melhores influenciadores recebem até ' + fmtMoney(valInfl) + ' cada — usa 100% do orçamento, concentrado em quem performa melhor.';
   }
   ['budget','capTipos','capInfl'].forEach(function(id){
     document.getElementById(id).addEventListener('input', updateCapNotes);
