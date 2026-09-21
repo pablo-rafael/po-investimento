@@ -28,15 +28,19 @@
     [18135,305,21449,330,6750],
     [20617,539,12169,815,16834]
   ];
+  var ENC_DEFAULT_RATES = [
+    [8000,120,12000,300,8000],
+    [6200,95,9500,260,6200]
+  ];
   var DEFAULT_WEIGHTS = [1,1,1,1,1];
   var DEFAULT_BUDGET = 4500;
   var DEFAULT_CAP_TIPOS_MODE = 'pct';
   var DEFAULT_CAP_TIPOS_RAW = 50;
   var DEFAULT_CAP_INFL = 20;
+  var DEFAULT_CAP_ENC = 50;
 
   var fmtMoney = function(n){ return 'R$ ' + (n||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}); };
   var fmtNum = function(n){ return ((n||0)/1000).toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:1}) + ' mil'; };
-  var pct = function(n){ return (n*100).toLocaleString('pt-BR',{maximumFractionDigits:0}) + '%'; };
 
   var monthKeyToLabel = function(key){
     if(!key) return '';
@@ -150,96 +154,115 @@
   }
   buildRateTable(document.getElementById('tiposTable'), TIPO_NAMES, false, 'tipo');
 
-  // ---------- Modelo B: tabela dinâmica de influenciadores (adicionar/remover linhas) ----------
-  var inflTableEl = document.getElementById('inflTable');
-
+  // ---------- Modelo B / Modelo C: listas dinâmicas (adicionar/remover linhas) ----------
   function escapeAttr(s){ return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
 
-  function renderInflTable(names, ratesMatrix){
-    var thead = '<thead><tr><th>Influenciador</th>';
-    METRICS.forEach(function(m){ thead += '<th>' + m.label + '</th>'; });
-    thead += '<th></th></tr></thead>';
-    var tbody = '<tbody>';
-    names.forEach(function(name, r){
-      var row = ratesMatrix[r] || [];
-      tbody += '<tr data-idx="' + r + '">';
-      tbody += '<td><input type="text" id="infl-name-' + r + '" value="' + escapeAttr(name) + '"></td>';
-      METRICS.forEach(function(m, c){
-        var v = row[c] != null ? row[c] : '';
-        tbody += '<td><input type="number" step="1" id="infl-' + r + '-' + c + '" value="' + v + '"></td>';
+  function makeDynamicList(opts){
+    var tableEl = document.getElementById(opts.tableId);
+
+    function render(names, ratesMatrix){
+      var thead = '<thead><tr><th>' + opts.label + '</th>';
+      METRICS.forEach(function(m){ thead += '<th>' + m.label + '</th>'; });
+      thead += '<th></th></tr></thead>';
+      var tbody = '<tbody>';
+      names.forEach(function(name, r){
+        var row = ratesMatrix[r] || [];
+        tbody += '<tr data-idx="' + r + '">';
+        tbody += '<td><input type="text" id="' + opts.idPrefix + '-name-' + r + '" value="' + escapeAttr(name) + '"></td>';
+        METRICS.forEach(function(m, c){
+          var v = row[c] != null ? row[c] : '';
+          tbody += '<td><input type="number" step="1" id="' + opts.idPrefix + '-' + r + '-' + c + '" value="' + v + '"></td>';
+        });
+        tbody += '<td><button type="button" class="btn small danger row-del" title="Remover">×</button></td>';
+        tbody += '</tr>';
       });
-      tbody += '<td><button type="button" class="btn small danger row-del" title="Remover">×</button></td>';
-      tbody += '</tr>';
-    });
-    tbody += '</tbody>';
-    inflTableEl.innerHTML = thead + tbody;
-    bindInflRowDeletes();
-    updateInflCapMax();
-  }
+      tbody += '</tbody>';
+      tableEl.innerHTML = thead + tbody;
+      bindDeletes();
+      updateCapMax();
+    }
 
-  function currentInflCount(){ return document.querySelectorAll('#inflTable tbody tr').length; }
+    function currentCount(){ return tableEl.querySelectorAll('tbody tr').length; }
 
-  function readInflFromDOM(){
-    var rows = document.querySelectorAll('#inflTable tbody tr');
-    var names = [], rates = [];
-    rows.forEach(function(tr){
-      var idx = tr.getAttribute('data-idx');
-      var nameEl = document.getElementById('infl-name-' + idx);
-      names.push((nameEl && nameEl.value) || ('Influenciador ' + (parseInt(idx,10)+1)));
-      rates.push(METRICS.map(function(_, c){
-        var el = document.getElementById('infl-' + idx + '-' + c);
-        return el ? (parseFloat(el.value) || 0) : 0;
-      }));
-    });
-    return { names: names, rates: rates };
-  }
-
-  function renumberInflRows(){
-    var rows = document.querySelectorAll('#inflTable tbody tr');
-    rows.forEach(function(tr, idx){
-      var oldIdx = tr.getAttribute('data-idx');
-      tr.setAttribute('data-idx', idx);
-      var nameEl = document.getElementById('infl-name-' + oldIdx);
-      if(nameEl) nameEl.id = 'infl-name-' + idx;
-      METRICS.forEach(function(_, c){
-        var el = document.getElementById('infl-' + oldIdx + '-' + c);
-        if(el) el.id = 'infl-' + idx + '-' + c;
+    function readFromDOM(){
+      var rows = tableEl.querySelectorAll('tbody tr');
+      var names = [], rates = [];
+      rows.forEach(function(tr){
+        var idx = tr.getAttribute('data-idx');
+        var nameEl = document.getElementById(opts.idPrefix + '-name-' + idx);
+        names.push((nameEl && nameEl.value) || opts.defaultName(parseInt(idx,10)));
+        rates.push(METRICS.map(function(_, c){
+          var el = document.getElementById(opts.idPrefix + '-' + idx + '-' + c);
+          return el ? (parseFloat(el.value) || 0) : 0;
+        }));
       });
-    });
-  }
+      return { names: names, rates: rates };
+    }
 
-  function updateInflCapMax(){
-    var n = currentInflCount();
-    var capEl = document.getElementById('capInfl');
-    capEl.max = n;
-    if((parseInt(capEl.value,10) || 0) > n) capEl.value = n;
-  }
-
-  function bindInflRowDeletes(){
-    document.querySelectorAll('#inflTable .row-del').forEach(function(btn){
-      btn.addEventListener('click', function(){
-        var tbody = document.querySelector('#inflTable tbody');
-        if(tbody.children.length <= 1){ alert('É preciso manter pelo menos 1 influenciador.'); return; }
-        btn.closest('tr').remove();
-        renumberInflRows();
-        updateInflCapMax();
-        updateCapNotes();
+    function renumber(){
+      var rows = tableEl.querySelectorAll('tbody tr');
+      rows.forEach(function(tr, idx){
+        var oldIdx = tr.getAttribute('data-idx');
+        tr.setAttribute('data-idx', idx);
+        var nameEl = document.getElementById(opts.idPrefix + '-name-' + oldIdx);
+        if(nameEl) nameEl.id = opts.idPrefix + '-name-' + idx;
+        METRICS.forEach(function(_, c){
+          var el = document.getElementById(opts.idPrefix + '-' + oldIdx + '-' + c);
+          if(el) el.id = opts.idPrefix + '-' + idx + '-' + c;
+        });
       });
+    }
+
+    function updateCapMax(){
+      var n = currentCount();
+      var capEl = document.getElementById(opts.capId);
+      capEl.max = n;
+      if((parseInt(capEl.value,10) || 0) > n) capEl.value = n;
+    }
+
+    function bindDeletes(){
+      tableEl.querySelectorAll('.row-del').forEach(function(btn){
+        btn.addEventListener('click', function(){
+          var tbody = tableEl.querySelector('tbody');
+          if(tbody.children.length <= 1){ alert('É preciso manter pelo menos 1 ' + opts.singular + '.'); return; }
+          btn.closest('tr').remove();
+          renumber();
+          updateCapMax();
+          updateCapNotes();
+        });
+      });
+    }
+
+    document.getElementById(opts.addBtnId).addEventListener('click', function(){
+      var current = readFromDOM();
+      var n = current.names.length;
+      current.names.push(opts.defaultName(n));
+      current.rates.push([0,0,0,0,0]);
+      render(current.names, current.rates);
+      updateCapNotes();
     });
+
+    return { render: render, currentCount: currentCount, readFromDOM: readFromDOM };
   }
 
-  document.getElementById('btnAddInfl').addEventListener('click', function(){
-    var current = readInflFromDOM();
-    var n = current.names.length;
-    current.names.push('Influenciador ' + String(n+1).padStart(2,'0'));
-    current.rates.push([0,0,0,0,0]);
-    renderInflTable(current.names, current.rates);
-    updateCapNotes();
+  var inflList = makeDynamicList({
+    tableId: 'inflTable', idPrefix: 'infl', addBtnId: 'btnAddInfl', capId: 'capInfl',
+    label: 'Influenciador', singular: 'influenciador',
+    defaultName: function(n){ return 'Influenciador ' + String(n+1).padStart(2,'0'); }
+  });
+  var encList = makeDynamicList({
+    tableId: 'encTable', idPrefix: 'enc', addBtnId: 'btnAddEnc', capId: 'capEnc',
+    label: 'Encarte', singular: 'encarte',
+    defaultName: function(n){ return 'Encarte ' + String(n+1).padStart(2,'0'); }
   });
 
-  renderInflTable(
+  inflList.render(
     INFL_DEFAULT_RATES.map(function(_,i){ return 'Influenciador ' + String(i+1).padStart(2,'0'); }),
     INFL_DEFAULT_RATES
+  );
+  encList.render(
+    ENC_DEFAULT_RATES.map(function(_,i){ return 'Encarte ' + String(i+1).padStart(2,'0'); }),
+    ENC_DEFAULT_RATES
   );
 
   // ---------- importar planilha (.xlsx/.csv) ----------
@@ -301,6 +324,7 @@
         var wb = XLSX.read(new Uint8Array(ev.target.result), {type:'array'});
         var tiposSheet = findSheetByName(wb, [/^dados$/i, /^dados\b/i]);
         var inflSheet = findSheetByName(wb, [/influenc/i]);
+        var encSheet = findSheetByName(wb, [/encarte/i]);
         var solverTipos = findSheetByName(wb, [/^solver$/i]);
         var solverInfl = findSheetByName(wb, [/solver.*influenc/i]);
         var found = [];
@@ -316,8 +340,14 @@
 
         var inflParsed = parseRatesSheet(inflSheet, 200);
         if(inflParsed){
-          renderInflTable(inflParsed.names, inflParsed.rates);
+          inflList.render(inflParsed.names, inflParsed.rates);
           found.push('Modelo B (' + inflParsed.names.length + ' influenciadores)');
+        }
+
+        var encParsed = parseRatesSheet(encSheet, 200);
+        if(encParsed){
+          encList.render(encParsed.names, encParsed.rates);
+          found.push('Modelo C (' + encParsed.names.length + ' encartes)');
         }
 
         var budget = findLabelValue(solverTipos, /limite de investimento/i) || findLabelValue(solverInfl, /limite de investimento/i);
@@ -349,10 +379,13 @@
       capTiposMode: DEFAULT_CAP_TIPOS_MODE,
       capTiposRaw: DEFAULT_CAP_TIPOS_RAW,
       capInfl: DEFAULT_CAP_INFL,
+      capEnc: DEFAULT_CAP_ENC,
       tiposNomes: TIPO_NAMES.slice(),
       tiposRates: TIPO_DEFAULT_RATES.map(function(r){ return r.slice(); }),
       inflNomes: INFL_DEFAULT_RATES.map(function(_,i){ return 'Influenciador ' + String(i+1).padStart(2,'0'); }),
-      inflRates: INFL_DEFAULT_RATES.map(function(r){ return r.slice(); })
+      inflRates: INFL_DEFAULT_RATES.map(function(r){ return r.slice(); }),
+      encNomes: ENC_DEFAULT_RATES.map(function(_,i){ return 'Encarte ' + String(i+1).padStart(2,'0'); }),
+      encRates: ENC_DEFAULT_RATES.map(function(r){ return r.slice(); })
     };
   }
 
@@ -373,16 +406,22 @@
     updateCapTiposLabel();
     data.weights.forEach(function(w,i){ document.getElementById('weight-'+i).value = w; });
     data.tiposRates.forEach(function(row,r){ row.forEach(function(v,c){ document.getElementById('tipo-'+r+'-'+c).value = v; }); });
-    renderInflTable(data.inflNomes, data.inflRates);
+    inflList.render(data.inflNomes, data.inflRates);
     document.getElementById('capInfl').value = Math.max(1, Math.round(100/Math.max(data.capInfl,1)));
+    var encNomes = data.encNomes || ENC_DEFAULT_RATES.map(function(_,i){ return 'Encarte ' + String(i+1).padStart(2,'0'); });
+    var encRates = data.encRates || ENC_DEFAULT_RATES;
+    encList.render(encNomes, encRates);
+    document.getElementById('capEnc').value = Math.max(1, Math.round(100/Math.max(data.capEnc || DEFAULT_CAP_ENC,1)));
     updateCapNotes();
   }
 
   function readFormData(key){
     var weights = METRICS.map(function(_,i){ return parseFloat(document.getElementById('weight-'+i).value) || 0; });
     var tiposRates = TIPO_NAMES.map(function(_,r){ return METRICS.map(function(_,c){ return parseFloat(document.getElementById('tipo-'+r+'-'+c).value) || 0; }); });
-    var inflData = readInflFromDOM();
-    var maxInfl = Math.max(currentInflCount(), 1);
+    var inflData = inflList.readFromDOM();
+    var encData = encList.readFromDOM();
+    var maxInfl = Math.max(inflList.currentCount(), 1);
+    var maxEnc = Math.max(encList.currentCount(), 1);
     return {
       key: key,
       label: document.getElementById('monthLabel').value || monthKeyToLabel(key),
@@ -391,10 +430,13 @@
       capTiposMode: document.getElementById('capTiposMode').value,
       capTiposRaw: parseFloat(document.getElementById('capTipos').value) || 0,
       capInfl: 100 / Math.min(Math.max(parseInt(document.getElementById('capInfl').value,10) || 5, 1), maxInfl),
+      capEnc: 100 / Math.min(Math.max(parseInt(document.getElementById('capEnc').value,10) || 2, 1), maxEnc),
       tiposNomes: TIPO_NAMES.slice(),
       tiposRates: tiposRates,
       inflNomes: inflData.names,
-      inflRates: inflData.rates
+      inflRates: inflData.rates,
+      encNomes: encData.names,
+      encRates: encData.rates
     };
   }
 
@@ -435,12 +477,19 @@
     if(pctTipos < 50) noteTipos += ' · abaixo de 50%, com só 2 tipos, pode sobrar orçamento sem alocar.';
     document.getElementById('capTiposNote').textContent = noteTipos;
 
-    var nInfl = Math.min(Math.max(parseInt(document.getElementById('capInfl').value,10) || 5, 1), Math.max(currentInflCount(),1));
-    var inflBudget = currentTiposResult().alloc[0];
+    var tiposRes = currentTiposResult();
+
+    var nInfl = Math.min(Math.max(parseInt(document.getElementById('capInfl').value,10) || 5, 1), Math.max(inflList.currentCount(),1));
+    var inflBudget = tiposRes.alloc[0];
     var valInfl = nInfl > 0 ? inflBudget / nInfl : 0;
     document.getElementById('capInflNote').textContent = 'Os ' + nInfl + ' melhores influenciadores recebem até ' + fmtMoney(valInfl) + ' cada, dividindo a verba de ' + fmtMoney(inflBudget) + ' que o Modelo A destina a "Influenciadores".';
+
+    var nEnc = Math.min(Math.max(parseInt(document.getElementById('capEnc').value,10) || 2, 1), Math.max(encList.currentCount(),1));
+    var encBudget = tiposRes.alloc[1];
+    var valEnc = nEnc > 0 ? encBudget / nEnc : 0;
+    document.getElementById('capEncNote').textContent = 'Os ' + nEnc + ' melhores encartes recebem até ' + fmtMoney(valEnc) + ' cada, dividindo a verba de ' + fmtMoney(encBudget) + ' que o Modelo A destina a "Encartes".';
   }
-  ['budget','capTipos','capInfl'].forEach(function(id){
+  ['budget','capTipos','capInfl','capEnc'].forEach(function(id){
     document.getElementById(id).addEventListener('input', updateCapNotes);
   });
 
@@ -488,11 +537,19 @@
   function calcAndShow(data){
     var resTipos = computeAllocation(data.tiposNomes, data.tiposRates, data.weights, data.budget, tiposCapPct(data));
     var inflBudget = resTipos.alloc[0]; // verba que o Modelo A destinou ao tipo "Influenciadores"
+    var encBudget = resTipos.alloc[1]; // verba que o Modelo A destinou ao tipo "Encartes"
     var resInfl = computeAllocation(data.inflNomes, data.inflRates, data.weights, inflBudget, data.capInfl);
-    renderResultBlock('resultTipos', 'Modelo A — Influenciadores × Encartes', data.tiposNomes, resTipos, true);
+    var resEnc = computeAllocation(data.encNomes, data.encRates, data.weights, encBudget, data.capEnc);
+    // O Modelo A exibe a soma real dos totais dos Modelos B e C, em vez de recalcular pela taxa própria da linha do tipo
+    resTipos.metricTotals = METRICS.map(function(_, i){ return (resInfl.metricTotals[i] || 0) + (resEnc.metricTotals[i] || 0); });
+    resTipos.objective = resInfl.objective + resEnc.objective;
+    renderResultBlock('resultTipos', 'Modelo A — Influenciadores × Encartes', data.tiposNomes, resTipos, true,
+      'Os totais de métrica e o total ponderado somam os resultados reais dos Modelos B e C.');
     renderResultBlock('resultInfl', 'Modelo B — influenciadores', data.inflNomes, resInfl, false,
       'Divide apenas a verba que o Modelo A destinou a "Influenciadores": ' + fmtMoney(inflBudget) + '.');
-    return {tipos: resTipos, infl: resInfl};
+    renderResultBlock('resultEnc', 'Modelo C — encartes', data.encNomes, resEnc, false,
+      'Divide apenas a verba que o Modelo A destinou a "Encartes": ' + fmtMoney(encBudget) + '.');
+    return {tipos: resTipos, infl: resInfl, enc: resEnc};
   }
 
   // ---------- state / navigation ----------
@@ -664,54 +721,67 @@
     return svg;
   }
 
+  function historyTable(title, docs, labels, getNomesRates, getRTAlloc, fieldCap){
+    var perDoc = docs.map(function(d){
+      var data = d.data;
+      var rT = computeAllocation(data.tiposNomes, data.tiposRates, data.weights, data.budget, tiposCapPct(data));
+      var nr = getNomesRates(data);
+      var r = computeAllocation(nr.names, nr.rates, data.weights, getRTAlloc(rT), data[fieldCap]);
+      var byName = {};
+      nr.names.forEach(function(n, idx){ byName[n] = r.alloc[idx] || 0; });
+      return { byName: byName, objective: r.objective };
+    });
+    var allNames = [];
+    docs.forEach(function(d){ getNomesRates(d.data).names.forEach(function(n){ if(allNames.indexOf(n) === -1) allNames.push(n); }); });
+    var html = '<h2>' + title + '</h2><div class="scrollx"><table class="grid"><thead><tr><th></th>';
+    labels.forEach(function(l){ html += '<th>' + l + '</th>'; });
+    html += '</tr></thead><tbody>';
+    allNames.forEach(function(name){
+      html += '<tr><td>' + name + '</td>';
+      perDoc.forEach(function(d){
+        html += '<td>' + (name in d.byName ? fmtMoney(d.byName[name]) : '—') + '</td>';
+      });
+      html += '</tr>';
+    });
+    html += '</tbody></table></div>';
+    return { html: html, objectives: perDoc.map(function(d){ return d.objective; }) };
+  }
+
   function renderComparativo(docs){
     var objEl = document.getElementById('compareObjective');
     var tiposEl = document.getElementById('compareTipos');
     var inflEl = document.getElementById('compareInfl');
+    var encEl = document.getElementById('compareEnc');
     if(!docs.length){
-      objEl.innerHTML = ''; tiposEl.innerHTML = ''; inflEl.innerHTML = '';
+      objEl.innerHTML = ''; tiposEl.innerHTML = ''; inflEl.innerHTML = ''; encEl.innerHTML = '';
       return;
     }
     var labels = docs.map(function(d){ return d.data.label || d.data.key; });
-    var objTipos = [], objInfl = [], allocTipos0 = [], allocTipos1 = [];
+    var objTipos = [], allocTipos0 = [], allocTipos1 = [];
     docs.forEach(function(d){
       var data = d.data;
       var rT = computeAllocation(data.tiposNomes, data.tiposRates, data.weights, data.budget, tiposCapPct(data));
-      var rI = computeAllocation(data.inflNomes, data.inflRates, data.weights, rT.alloc[0], data.capInfl);
-      objTipos.push(rT.objective); objInfl.push(rI.objective);
+      objTipos.push(rT.objective);
       allocTipos0.push(rT.alloc[0]); allocTipos1.push(rT.alloc[1]);
     });
-    objEl.innerHTML = '<h2>Resultado ponderado por mês</h2><div class="hint">Comparação entre os dois modelos de alocação.</div>' +
-      svgLineChart([objTipos, objInfl], labels, ['#2fa88f','#d9a72e']) +
-      '<div class="legend"><span><span class="dot" style="background:#2fa88f"></span>Modelo A (2 tipos)</span><span><span class="dot" style="background:#d9a72e"></span>Modelo B (13 influenciadores)</span></div>';
+
+    var inflHist = historyTable('Alocação por influenciador — histórico', docs, labels,
+      function(data){ return { names: data.inflNomes, rates: data.inflRates }; },
+      function(rT){ return rT.alloc[0]; }, 'capInfl');
+    var encHist = historyTable('Alocação por encarte — histórico', docs, labels,
+      function(data){ return { names: data.encNomes || [], rates: data.encRates || []}; },
+      function(rT){ return rT.alloc[1]; }, 'capEnc');
+
+    objEl.innerHTML = '<h2>Resultado ponderado por mês</h2><div class="hint">Comparação entre os três modelos de alocação.</div>' +
+      svgLineChart([objTipos, inflHist.objectives, encHist.objectives], labels, ['#2fa88f','#d9a72e','#8a7fd6']) +
+      '<div class="legend"><span><span class="dot" style="background:#2fa88f"></span>Modelo A (tipos)</span><span><span class="dot" style="background:#d9a72e"></span>Modelo B (influenciadores)</span><span><span class="dot" style="background:#8a7fd6"></span>Modelo C (encartes)</span></div>';
 
     tiposEl.innerHTML = '<h2>Divisão do orçamento — Influenciadores × Encartes</h2>' +
       svgStackedBars(allocTipos0, allocTipos1, labels, '#2fa88f', '#d9a72e') +
       '<div class="legend"><span><span class="dot" style="background:#2fa88f"></span>Influenciadores</span><span><span class="dot" style="background:#d9a72e"></span>Encartes</span></div>';
 
-    // tabela influenciadores por mês (scroll horizontal) — alinhada por nome, pois a lista pode mudar de mês pra mês
-    var perDoc = docs.map(function(d){
-      var data = d.data;
-      var rTd = computeAllocation(data.tiposNomes, data.tiposRates, data.weights, data.budget, tiposCapPct(data));
-      var rI = computeAllocation(data.inflNomes, data.inflRates, data.weights, rTd.alloc[0], data.capInfl);
-      var byName = {};
-      data.inflNomes.forEach(function(n, idx){ byName[n] = rI.alloc[idx] || 0; });
-      return byName;
-    });
-    var allNames = [];
-    docs.forEach(function(d){ d.data.inflNomes.forEach(function(n){ if(allNames.indexOf(n) === -1) allNames.push(n); }); });
-    var tableHtml = '<h2>Alocação por influenciador — histórico</h2><div class="scrollx"><table class="grid"><thead><tr><th>Influenciador</th>';
-    labels.forEach(function(l){ tableHtml += '<th>' + l + '</th>'; });
-    tableHtml += '</tr></thead><tbody>';
-    allNames.forEach(function(name){
-      tableHtml += '<tr><td>' + name + '</td>';
-      perDoc.forEach(function(byName){
-        tableHtml += '<td>' + (name in byName ? fmtMoney(byName[name]) : '—') + '</td>';
-      });
-      tableHtml += '</tr>';
-    });
-    tableHtml += '</tbody></table></div>';
-    inflEl.innerHTML = tableHtml;
+    inflEl.innerHTML = inflHist.html;
+    encEl.innerHTML = encHist.html;
   }
 
   // ---------- boot ----------

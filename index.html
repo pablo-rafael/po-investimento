@@ -105,6 +105,22 @@
       <div class="cap-note" id="capInflNote"></div>
     </div>
 
+    <div class="panel">
+      <h2>Modelo C — encartes</h2>
+      <div class="hint">Quanto cada métrica rende por R$ 1,00 investido em cada encarte. Renomeie, adicione ou remova linhas conforme sua lista mudar.</div>
+      <div class="scrollx">
+        <table class="grid" id="encTable"></table>
+      </div>
+      <button class="btn small" id="btnAddEnc" style="margin-top:8px;">+ Adicionar encarte</button>
+      <div class="field-row" style="margin-top:10px;">
+        <div class="field">
+          <label>Diversificar entre pelo menos (nº de encartes)</label>
+          <input type="number" id="capEnc" min="1" step="1">
+        </div>
+      </div>
+      <div class="cap-note" id="capEncNote"></div>
+    </div>
+
     <div class="actions">
       <button class="btn" id="btnCalc">Calcular (sem salvar)</button>
       <button class="btn primary" id="btnSave">Salvar mês</button>
@@ -116,6 +132,7 @@
   <section class="view" id="view-results">
     <div class="panel" id="resultTipos"></div>
     <div class="panel" id="resultInfl"></div>
+    <div class="panel" id="resultEnc"></div>
   </section>
 
   <!-- ===================== COMPARATIVO ===================== -->
@@ -128,6 +145,7 @@
     <div class="panel" id="compareObjective"></div>
     <div class="panel" id="compareTipos"></div>
     <div class="panel" id="compareInfl"></div>
+    <div class="panel" id="compareEnc"></div>
   </section>
 
 </main>
@@ -135,4 +153,5 @@
 <footer class="note">Os valores de exemplo já preenchidos vieram da sua planilha original — substitua pelos dados reais de cada mês. O cálculo replica a otimização do Solver (alocação fracionária ótima respeitando o teto de diversificação e o orçamento).</footer>
 
 <script src="app.js"></script>
-</body>>
+</body>
+</html>
