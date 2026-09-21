@@ -139,8 +139,18 @@
   <section class="view" id="view-compare">
     <div class="panel">
       <h2>Meses salvos</h2>
-      <div class="hint">Toque em um mês para carregá-lo em "Configurar mês".</div>
+      <div class="hint">Toque em um mês para ver os detalhes aqui embaixo. Use "Editar este mês" para abrir no formulário.</div>
       <div id="monthList"></div>
+      <button class="month-pill" id="btnAddMonthPill" type="button" style="cursor:pointer; border-style:dashed; background:transparent;">+ novo mês</button>
+    </div>
+    <div class="panel" id="featuredMonthPanel" style="display:none;">
+      <div class="result-head" style="margin-bottom:10px;">
+        <h2 id="featuredMonthTitle">Mês em destaque</h2>
+        <button class="btn small ghost" id="btnEditFeatured">Editar este mês</button>
+      </div>
+      <div id="featuredTipos"></div>
+      <div id="featuredInfl" style="margin-top:14px;"></div>
+      <div id="featuredEnc" style="margin-top:14px;"></div>
     </div>
     <div class="panel" id="compareObjective"></div>
     <div class="panel" id="compareTipos"></div>

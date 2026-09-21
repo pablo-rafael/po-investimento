@@ -638,27 +638,78 @@
   });
 
   // ---------- comparativo ----------
+  var featuredKey = null;
+  var lastDocs = [];
+
   function refreshMonthList(){
     if(!db) return;
     db.collection('meses').orderBy('key','asc').get().then(function(q){
+      lastDocs = q.docs;
+      if(featuredKey && !q.docs.some(function(d){ return d.data.key === featuredKey; })){
+        featuredKey = null;
+        document.getElementById('featuredMonthPanel').style.display = 'none';
+      }
       renderMonthList(q.docs);
       renderComparativo(q.docs);
     }).catch(function(){});
   }
 
+  function showFeaturedMonth(key, data){
+    featuredKey = key;
+    var resTipos = computeAllocation(data.tiposNomes, data.tiposRates, data.weights, data.budget, tiposCapPct(data));
+    var inflBudget = resTipos.alloc[0], encBudget = resTipos.alloc[1];
+    var resInfl = computeAllocation(data.inflNomes, data.inflRates, data.weights, inflBudget, data.capInfl);
+    var resEnc = computeAllocation(data.encNomes || [], data.encRates || [], data.weights, encBudget, data.capEnc);
+    resTipos.metricTotals = METRICS.map(function(_,i){ return (resInfl.metricTotals[i]||0) + (resEnc.metricTotals[i]||0); });
+    resTipos.objective = resInfl.objective + resEnc.objective;
+    document.getElementById('featuredMonthPanel').style.display = '';
+    document.getElementById('featuredMonthTitle').textContent = 'Mês em destaque: ' + (data.label || key);
+    renderResultBlock('featuredTipos', 'Modelo A — Influenciadores × Encartes', data.tiposNomes, resTipos, true);
+    renderResultBlock('featuredInfl', 'Modelo B — influenciadores', data.inflNomes, resInfl, false,
+      'Verba de "Influenciadores": ' + fmtMoney(inflBudget) + '.');
+    renderResultBlock('featuredEnc', 'Modelo C — encartes', data.encNomes || [], resEnc, false,
+      'Verba de "Encartes": ' + fmtMoney(encBudget) + '.');
+  }
+
+  document.getElementById('btnEditFeatured').addEventListener('click', function(){
+    if(!featuredKey) return;
+    loadMonth(featuredKey);
+    activateView('config');
+  });
+
+  function suggestNextMonthKey(){
+    if(lastDocs.length){
+      var last = lastDocs[lastDocs.length-1].data.key;
+      var parts = last.split('-'); var y = parseInt(parts[0],10), m = parseInt(parts[1],10) + 1;
+      if(m > 12){ m = 1; y += 1; }
+      return y + '-' + String(m).padStart(2,'0');
+    }
+    var d = new Date();
+    return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
+  }
+
+  document.getElementById('btnAddMonthPill').addEventListener('click', function(){
+    var key = prompt('Mês do novo registro (AAAA-MM):', suggestNextMonthKey());
+    if(!key) return;
+    if(!/^\d{4}-\d{2}$/.test(key)){ alert('Use o formato AAAA-MM, por exemplo 2026-10.'); return; }
+    loadMonth(key);
+    activateView('config');
+  });
+
   function renderMonthList(docs){
     var el = document.getElementById('monthList');
-    if(!docs.length){ el.innerHTML = '<div class="empty">Nenhum mês salvo ainda. Configure e salve um mês para começar o histórico.</div>'; return; }
+    if(!docs.length){ el.innerHTML = '<div class="empty">Nenhum mês salvo ainda. Toque em "+ novo mês" para começar o histórico.</div>'; return; }
     var html = '';
     docs.forEach(function(d){
-      html += '<span class="month-pill' + (d.data.key===currentKey?' active':'') + '" data-key="' + d.data.key + '">' + (d.data.label || d.data.key) + '<button data-del="' + d.data.key + '" title="excluir">×</button></span>';
+      html += '<span class="month-pill' + (d.data.key===featuredKey?' active':'') + '" data-key="' + d.data.key + '">' + (d.data.label || d.data.key) + '<button data-del="' + d.data.key + '" title="excluir">×</button></span>';
     });
     el.innerHTML = html;
     el.querySelectorAll('.month-pill').forEach(function(p){
       p.addEventListener('click', function(e){
         if(e.target.dataset.del) return;
-        loadMonth(p.dataset.key);
-        activateView('config');
+        var doc = lastDocs.filter(function(d){ return d.data.key === p.dataset.key; })[0];
+        if(doc) showFeaturedMonth(doc.data.key, doc.data);
+        renderMonthList(lastDocs);
       });
     });
     el.querySelectorAll('[data-del]').forEach(function(btn){
@@ -670,7 +721,7 @@
     });
   }
 
-  function svgLineChart(series, labels, colors, height){
+  function svgLineChart(series, labels, colors, height, highlightIdx){
     height = height || 160;
     var width = 640, padL = 36, padR = 10, padT = 10, padB = 22;
     var allVals = [].concat.apply([], series);
@@ -685,14 +736,21 @@
       var gy = padT + g*(height-padT-padB)/3;
       svg += '<line x1="'+padL+'" x2="'+(width-padR)+'" y1="'+gy+'" y2="'+gy+'" stroke="var(--line)" stroke-width="1"/>';
     }
+    if(highlightIdx != null && highlightIdx >= 0){
+      svg += '<line x1="'+x(highlightIdx)+'" x2="'+x(highlightIdx)+'" y1="'+padT+'" y2="'+(height-padB)+'" stroke="var(--ink-dim)" stroke-width="1" stroke-dasharray="3,3"/>';
+    }
     series.forEach(function(s, si){
       var pts = s.map(function(v,i){ return x(i) + ',' + y(v); }).join(' ');
       svg += '<polyline points="' + pts + '" fill="none" stroke="' + colors[si] + '" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>';
-      s.forEach(function(v,i){ svg += '<circle cx="'+x(i)+'" cy="'+y(v)+'" r="3" fill="'+colors[si]+'"/>'; });
+      s.forEach(function(v,i){
+        var r = (highlightIdx === i) ? 5 : 3;
+        svg += '<circle cx="'+x(i)+'" cy="'+y(v)+'" r="'+r+'" fill="'+colors[si]+'" ' + (highlightIdx===i ? 'stroke="var(--ink)" stroke-width="1.5"' : '') + '/>';
+      });
     });
     labels.forEach(function(l,i){
-      if(n>8 && i%Math.ceil(n/8)!==0 && i!==n-1) return;
-      svg += '<text x="'+x(i)+'" y="'+(height-6)+'" font-size="9" fill="var(--ink-faint)" font-family="var(--mono)" text-anchor="middle">'+l+'</text>';
+      if(n>8 && i%Math.ceil(n/8)!==0 && i!==n-1 && i!==highlightIdx) return;
+      var bold = (i===highlightIdx) ? ' font-weight="600" fill="var(--ink)"' : ' fill="var(--ink-faint)"';
+      svg += '<text x="'+x(i)+'" y="'+(height-6)+'" font-size="9"'+bold+' font-family="var(--mono)" text-anchor="middle">'+l+'</text>';
     });
     svg += '</svg>';
     return svg;
@@ -721,7 +779,7 @@
     return svg;
   }
 
-  function historyTable(title, docs, labels, getNomesRates, getRTAlloc, fieldCap){
+  function historyTable(title, docs, labels, getNomesRates, getRTAlloc, fieldCap, highlightIdx){
     var perDoc = docs.map(function(d){
       var data = d.data;
       var rT = computeAllocation(data.tiposNomes, data.tiposRates, data.weights, data.budget, tiposCapPct(data));
@@ -734,12 +792,12 @@
     var allNames = [];
     docs.forEach(function(d){ getNomesRates(d.data).names.forEach(function(n){ if(allNames.indexOf(n) === -1) allNames.push(n); }); });
     var html = '<h2>' + title + '</h2><div class="scrollx"><table class="grid"><thead><tr><th></th>';
-    labels.forEach(function(l){ html += '<th>' + l + '</th>'; });
+    labels.forEach(function(l, i){ html += '<th' + (i===highlightIdx ? ' style="color:var(--accent);"' : '') + '>' + l + '</th>'; });
     html += '</tr></thead><tbody>';
     allNames.forEach(function(name){
       html += '<tr><td>' + name + '</td>';
-      perDoc.forEach(function(d){
-        html += '<td>' + (name in d.byName ? fmtMoney(d.byName[name]) : '—') + '</td>';
+      perDoc.forEach(function(d, i){
+        html += '<td' + (i===highlightIdx ? ' style="background:var(--panel-alt);"' : '') + '>' + (name in d.byName ? fmtMoney(d.byName[name]) : '—') + '</td>';
       });
       html += '</tr>';
     });
@@ -757,6 +815,8 @@
       return;
     }
     var labels = docs.map(function(d){ return d.data.label || d.data.key; });
+    var highlightIdx = -1;
+    docs.forEach(function(d, i){ if(d.data.key === featuredKey) highlightIdx = i; });
     var objTipos = [], allocTipos0 = [], allocTipos1 = [];
     docs.forEach(function(d){
       var data = d.data;
@@ -767,13 +827,13 @@
 
     var inflHist = historyTable('Alocação por influenciador — histórico', docs, labels,
       function(data){ return { names: data.inflNomes, rates: data.inflRates }; },
-      function(rT){ return rT.alloc[0]; }, 'capInfl');
+      function(rT){ return rT.alloc[0]; }, 'capInfl', highlightIdx);
     var encHist = historyTable('Alocação por encarte — histórico', docs, labels,
       function(data){ return { names: data.encNomes || [], rates: data.encRates || []}; },
-      function(rT){ return rT.alloc[1]; }, 'capEnc');
+      function(rT){ return rT.alloc[1]; }, 'capEnc', highlightIdx);
 
     objEl.innerHTML = '<h2>Resultado ponderado por mês</h2><div class="hint">Comparação entre os três modelos de alocação.</div>' +
-      svgLineChart([objTipos, inflHist.objectives, encHist.objectives], labels, ['#2fa88f','#d9a72e','#8a7fd6']) +
+      svgLineChart([objTipos, inflHist.objectives, encHist.objectives], labels, ['#2fa88f','#d9a72e','#8a7fd6'], null, highlightIdx) +
       '<div class="legend"><span><span class="dot" style="background:#2fa88f"></span>Modelo A (tipos)</span><span><span class="dot" style="background:#d9a72e"></span>Modelo B (influenciadores)</span><span><span class="dot" style="background:#8a7fd6"></span>Modelo C (encartes)</span></div>';
 
     tiposEl.innerHTML = '<h2>Divisão do orçamento — Influenciadores × Encartes</h2>' +
