@@ -10,34 +10,34 @@
   ];
   var TIPO_NAMES = ['Influenciadores','Encartes'];
   var TIPO_DEFAULT_RATES = [
-    [15000,450,20000,800,15000],
-    [8000,120,12000,300,8000]
+    [0,0,0,0,0],
+    [0,0,0,0,0]
   ];
   var INFL_DEFAULT_RATES = [
-    [16476,169,18115,617,10803],
-    [7824,512,9212,602,19588],
-    [6409,112,14231,868,16299],
-    [18149,110,22848,520,16133],
-    [10506,175,20149,1076,20507],
-    [10012,303,18105,294,20118],
-    [9657,318,14094,997,11925],
-    [8286,597,16055,720,15459],
-    [18066,107,20029,799,9150],
-    [7679,283,12349,377,17543],
-    [17087,509,12039,637,7139],
-    [18135,305,21449,330,6750],
-    [20617,539,12169,815,16834]
+    [0,0,0,0,0],
+    [0,0,0,0,0],
+    [0,0,0,0,0],
+    [0,0,0,0,0],
+    [0,0,0,0,0],
+    [0,0,0,0,0],
+    [0,0,0,0,0],
+    [0,0,0,0,0],
+    [0,0,0,0,0],
+    [0,0,0,0,0],
+    [0,0,0,0,0],
+    [0,0,0,0,0],
+    [0,0,0,0,0]
   ];
   var ENC_DEFAULT_RATES = [
-    [8000,120,12000,300,8000],
-    [6200,95,9500,260,6200]
+    [0,0,0,0,0],
+    [0,0,0,0,0]
   ];
   var DEFAULT_WEIGHTS = [1,1,1,1,1];
-  var DEFAULT_BUDGET = 4500;
+  var DEFAULT_BUDGET = 0;
   var DEFAULT_CAP_TIPOS_MODE = 'pct';
-  var DEFAULT_CAP_TIPOS_RAW = 50;
-  var DEFAULT_CAP_INFL = 20;
-  var DEFAULT_CAP_ENC = 50;
+  var DEFAULT_CAP_TIPOS_RAW = 0;
+  var DEFAULT_CAP_INFL = 0;
+  var DEFAULT_CAP_ENC = 0;
 
   var fmtMoney = function(n){ return 'R$ ' + (n||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}); };
   var fmtNum = function(n){ return ((n||0)/1000).toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:1}) + ' mil'; };
@@ -145,7 +145,7 @@
         tbody += '<td>' + name + '</td>';
       }
       METRICS.forEach(function(m, c){
-        tbody += '<td><input type="number" step="1" id="' + idPrefix + '-' + r + '-' + c + '"></td>';
+        tbody += '<td><input type="number" step="1" placeholder="0" id="' + idPrefix + '-' + r + '-' + c + '"></td>';
       });
       tbody += '</tr>';
     });
@@ -170,8 +170,9 @@
         tbody += '<tr data-idx="' + r + '">';
         tbody += '<td><input type="text" id="' + opts.idPrefix + '-name-' + r + '" value="' + escapeAttr(name) + '"></td>';
         METRICS.forEach(function(m, c){
-          var v = row[c] != null ? row[c] : '';
-          tbody += '<td><input type="number" step="1" id="' + opts.idPrefix + '-' + r + '-' + c + '" value="' + v + '"></td>';
+          var v = row[c];
+          var valueAttr = (v != null && v !== 0) ? (' value="' + v + '"') : '';
+          tbody += '<td><input type="number" step="1" placeholder="0"' + valueAttr + ' id="' + opts.idPrefix + '-' + r + '-' + c + '"></td>';
         });
         tbody += '<td><button type="button" class="btn small danger row-del" title="Remover">×</button></td>';
         tbody += '</tr>';
@@ -397,21 +398,24 @@
     return data.capTipos != null ? data.capTipos : 50; // compatibilidade com meses salvos antes desta versão
   }
 
+  function blankIfZero(v){ return (v == null || isNaN(v) || v === 0) ? '' : v; }
+
   function loadDataIntoForm(data){
     document.getElementById('monthLabel').value = data.label || '';
-    document.getElementById('budget').value = data.budget;
+    document.getElementById('budget').value = blankIfZero(data.budget);
     var mode = data.capTiposMode || 'pct';
     document.getElementById('capTiposMode').value = mode;
-    document.getElementById('capTipos').value = data.capTiposRaw != null ? data.capTiposRaw : (data.capTipos != null ? data.capTipos : 50);
+    var capTiposRaw = data.capTiposRaw != null ? data.capTiposRaw : (data.capTipos != null ? data.capTipos : 0);
+    document.getElementById('capTipos').value = blankIfZero(capTiposRaw);
     updateCapTiposLabel();
     data.weights.forEach(function(w,i){ document.getElementById('weight-'+i).value = w; });
-    data.tiposRates.forEach(function(row,r){ row.forEach(function(v,c){ document.getElementById('tipo-'+r+'-'+c).value = v; }); });
+    data.tiposRates.forEach(function(row,r){ row.forEach(function(v,c){ document.getElementById('tipo-'+r+'-'+c).value = blankIfZero(v); }); });
     inflList.render(data.inflNomes, data.inflRates);
-    document.getElementById('capInfl').value = Math.max(1, Math.round(100/Math.max(data.capInfl,1)));
+    document.getElementById('capInfl').value = data.capInfl ? blankIfZero(Math.round(100/data.capInfl)) : '';
     var encNomes = data.encNomes || ENC_DEFAULT_RATES.map(function(_,i){ return 'Encarte ' + String(i+1).padStart(2,'0'); });
     var encRates = data.encRates || ENC_DEFAULT_RATES;
     encList.render(encNomes, encRates);
-    document.getElementById('capEnc').value = Math.max(1, Math.round(100/Math.max(data.capEnc || DEFAULT_CAP_ENC,1)));
+    document.getElementById('capEnc').value = data.capEnc ? blankIfZero(Math.round(100/data.capEnc)) : '';
     updateCapNotes();
   }
 
@@ -448,11 +452,13 @@
     var budget = parseFloat(document.getElementById('budget').value) || 0;
     var input = document.getElementById('capTipos');
     var current = parseFloat(input.value) || 0;
+    var converted;
     if(this.value === 'valor'){
-      input.value = budget > 0 ? Math.round(budget * current/100) : current; // estava em %, converte para R$
+      converted = budget > 0 ? Math.round(budget * current/100) : current; // estava em %, converte para R$
     } else {
-      input.value = budget > 0 ? Math.round(current / budget * 100) : current; // estava em R$, converte para %
+      converted = budget > 0 ? Math.round(current / budget * 100) : current; // estava em R$, converte para %
     }
+    input.value = blankIfZero(converted);
     updateCapTiposLabel();
     updateCapNotes();
   });
