@@ -593,18 +593,9 @@
         loadDataIntoForm(snap.data);
         calcAndShow(snap.data);
       } else {
-        // tenta herdar o último mês salvo como ponto de partida
-        db.collection('meses').orderBy('key','desc').limit(1).get().then(function(q){
-          var base;
-          if(q.docs.length){
-            base = JSON.parse(JSON.stringify(q.docs[0].data));
-            base.key = key; base.label = monthKeyToLabel(key);
-          } else {
-            base = defaultMonthData(key);
-          }
-          loadDataIntoForm(base);
-          calcAndShow(base);
-        });
+        var base = defaultMonthData(key);
+        loadDataIntoForm(base);
+        calcAndShow(base);
       }
     }).catch(function(err){
       loadDataIntoForm(defaultMonthData(key));
