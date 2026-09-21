@@ -677,46 +677,47 @@
     activateView('config');
   });
 
-  function suggestNextMonthKey(){
-    if(lastDocs.length){
-      var last = lastDocs[lastDocs.length-1].data.key;
-      var parts = last.split('-'); var y = parseInt(parts[0],10), m = parseInt(parts[1],10) + 1;
-      if(m > 12){ m = 1; y += 1; }
-      return y + '-' + String(m).padStart(2,'0');
-    }
-    var d = new Date();
-    return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
-  }
-
-  document.getElementById('btnAddMonthPill').addEventListener('click', function(){
-    var key = prompt('Mês do novo registro (AAAA-MM):', suggestNextMonthKey());
-    if(!key) return;
-    if(!/^\d{4}-\d{2}$/.test(key)){ alert('Use o formato AAAA-MM, por exemplo 2026-10.'); return; }
-    loadMonth(key);
-    activateView('config');
+  document.getElementById('btnDeleteFeatured').addEventListener('click', function(){
+    if(!featuredKey) return;
+    if(!confirm('Excluir permanentemente o mês ' + featuredKey + '? Essa ação não pode ser desfeita.')) return;
+    db.collection('meses').doc(featuredKey).delete().then(function(){
+      featuredKey = null;
+      document.getElementById('featuredMonthPanel').style.display = 'none';
+      refreshMonthList();
+    });
   });
+
+  function toggleMonthVisibility(key){
+    var doc = lastDocs.filter(function(d){ return d.data.key === key; })[0];
+    if(!doc) return;
+    var updated = JSON.parse(JSON.stringify(doc.data));
+    updated.hiddenFromCompare = !updated.hiddenFromCompare;
+    db.collection('meses').doc(key).set(updated).then(refreshMonthList);
+  }
 
   function renderMonthList(docs){
     var el = document.getElementById('monthList');
-    if(!docs.length){ el.innerHTML = '<div class="empty">Nenhum mês salvo ainda. Toque em "+ novo mês" para começar o histórico.</div>'; return; }
+    if(!docs.length){ el.innerHTML = '<div class="empty">Nenhum mês salvo ainda. Configure e salve um mês para começar o histórico.</div>'; return; }
     var html = '';
     docs.forEach(function(d){
-      html += '<span class="month-pill' + (d.data.key===featuredKey?' active':'') + '" data-key="' + d.data.key + '">' + (d.data.label || d.data.key) + '<button data-del="' + d.data.key + '" title="excluir">×</button></span>';
+      var hidden = !!d.data.hiddenFromCompare;
+      html += '<span class="month-pill' + (d.data.key===featuredKey?' active':'') + (hidden?' dim':'') + '" data-key="' + d.data.key + '">' +
+        (d.data.label || d.data.key) +
+        '<button class="vis-toggle" data-toggle="' + d.data.key + '" title="' + (hidden ? 'Mostrar no comparativo' : 'Ocultar do comparativo') + '">' + (hidden ? 'exibir' : 'ocultar') + '</button></span>';
     });
     el.innerHTML = html;
     el.querySelectorAll('.month-pill').forEach(function(p){
       p.addEventListener('click', function(e){
-        if(e.target.dataset.del) return;
+        if(e.target.dataset.toggle) return;
         var doc = lastDocs.filter(function(d){ return d.data.key === p.dataset.key; })[0];
         if(doc) showFeaturedMonth(doc.data.key, doc.data);
         renderMonthList(lastDocs);
       });
     });
-    el.querySelectorAll('[data-del]').forEach(function(btn){
+    el.querySelectorAll('[data-toggle]').forEach(function(btn){
       btn.addEventListener('click', function(e){
         e.stopPropagation();
-        if(!confirm('Excluir o mês ' + btn.dataset.del + '?')) return;
-        db.collection('meses').doc(btn.dataset.del).delete().then(refreshMonthList);
+        toggleMonthVisibility(btn.dataset.toggle);
       });
     });
   }
@@ -810,29 +811,33 @@
     var tiposEl = document.getElementById('compareTipos');
     var inflEl = document.getElementById('compareInfl');
     var encEl = document.getElementById('compareEnc');
-    if(!docs.length){
-      objEl.innerHTML = ''; tiposEl.innerHTML = ''; inflEl.innerHTML = ''; encEl.innerHTML = '';
+    var visibleDocs = docs.filter(function(d){ return !d.data.hiddenFromCompare; });
+    if(!visibleDocs.length){
+      var msg = docs.length
+        ? 'Todos os meses estão ocultos do comparativo. Toque em "exibir" ao lado de um mês na lista acima para incluí-lo.'
+        : 'Nenhum mês salvo ainda.';
+      objEl.innerHTML = '<div class="empty">' + msg + '</div>'; tiposEl.innerHTML = ''; inflEl.innerHTML = ''; encEl.innerHTML = '';
       return;
     }
-    var labels = docs.map(function(d){ return d.data.label || d.data.key; });
+    var labels = visibleDocs.map(function(d){ return d.data.label || d.data.key; });
     var highlightIdx = -1;
-    docs.forEach(function(d, i){ if(d.data.key === featuredKey) highlightIdx = i; });
+    visibleDocs.forEach(function(d, i){ if(d.data.key === featuredKey) highlightIdx = i; });
     var objTipos = [], allocTipos0 = [], allocTipos1 = [];
-    docs.forEach(function(d){
+    visibleDocs.forEach(function(d){
       var data = d.data;
       var rT = computeAllocation(data.tiposNomes, data.tiposRates, data.weights, data.budget, tiposCapPct(data));
       objTipos.push(rT.objective);
       allocTipos0.push(rT.alloc[0]); allocTipos1.push(rT.alloc[1]);
     });
 
-    var inflHist = historyTable('Alocação por influenciador — histórico', docs, labels,
+    var inflHist = historyTable('Alocação por influenciador — histórico', visibleDocs, labels,
       function(data){ return { names: data.inflNomes, rates: data.inflRates }; },
       function(rT){ return rT.alloc[0]; }, 'capInfl', highlightIdx);
-    var encHist = historyTable('Alocação por encarte — histórico', docs, labels,
+    var encHist = historyTable('Alocação por encarte — histórico', visibleDocs, labels,
       function(data){ return { names: data.encNomes || [], rates: data.encRates || []}; },
       function(rT){ return rT.alloc[1]; }, 'capEnc', highlightIdx);
 
-    objEl.innerHTML = '<h2>Resultado ponderado por mês</h2><div class="hint">Comparação entre os três modelos de alocação.</div>' +
+    objEl.innerHTML = '<h2>Resultado ponderado por mês</h2><div class="hint">Comparação entre os três modelos de alocação (meses ocultos não entram aqui).</div>' +
       svgLineChart([objTipos, inflHist.objectives, encHist.objectives], labels, ['#2fa88f','#d9a72e','#8a7fd6'], null, highlightIdx) +
       '<div class="legend"><span><span class="dot" style="background:#2fa88f"></span>Modelo A (tipos)</span><span><span class="dot" style="background:#d9a72e"></span>Modelo B (influenciadores)</span><span><span class="dot" style="background:#8a7fd6"></span>Modelo C (encartes)</span></div>';
 
