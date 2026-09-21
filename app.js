@@ -683,6 +683,15 @@
     activateView('config');
   });
 
+  function clearFeaturedMonth(){
+    featuredKey = null;
+    document.getElementById('featuredMonthPanel').style.display = 'none';
+    renderMonthList(lastDocs);
+    renderComparativo(lastDocs);
+  }
+
+  document.getElementById('btnCloseFeatured').addEventListener('click', clearFeaturedMonth);
+
   document.getElementById('btnDeleteFeatured').addEventListener('click', function(){
     if(!featuredKey) return;
     if(!confirm('Excluir permanentemente o mês ' + featuredKey + '? Essa ação não pode ser desfeita.')) return;
@@ -715,6 +724,7 @@
     el.querySelectorAll('.month-pill').forEach(function(p){
       p.addEventListener('click', function(e){
         if(e.target.dataset.toggle) return;
+        if(p.dataset.key === featuredKey){ clearFeaturedMonth(); return; }
         var doc = lastDocs.filter(function(d){ return d.data.key === p.dataset.key; })[0];
         if(doc) showFeaturedMonth(doc.data.key, doc.data);
         renderMonthList(lastDocs);
