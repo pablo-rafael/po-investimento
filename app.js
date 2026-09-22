@@ -730,8 +730,8 @@
   }
 
   function svgLineChart(series, labels, colors, height, highlightIdx){
-    height = height || 160;
-    var width = 640, padL = 36, padR = 10, padT = 10, padB = 22;
+    height = height || 175;
+    var width = 640, padL = 36, padR = 10, padT = 22, padB = 22;
     var allVals = [].concat.apply([], series);
     var maxV = Math.max.apply(null, allVals.concat([1])) * 1.15;
     var n = labels.length;
@@ -747,12 +747,17 @@
     if(highlightIdx != null && highlightIdx >= 0){
       svg += '<line x1="'+x(highlightIdx)+'" x2="'+x(highlightIdx)+'" y1="'+padT+'" y2="'+(height-padB)+'" stroke="var(--ink-dim)" stroke-width="1" stroke-dasharray="3,3"/>';
     }
+    var showAllLabels = n <= 6;
     series.forEach(function(s, si){
       var pts = s.map(function(v,i){ return x(i) + ',' + y(v); }).join(' ');
       svg += '<polyline points="' + pts + '" fill="none" stroke="' + colors[si] + '" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>';
       s.forEach(function(v,i){
         var r = (highlightIdx === i) ? 5 : 3;
         svg += '<circle cx="'+x(i)+'" cy="'+y(v)+'" r="'+r+'" fill="'+colors[si]+'" ' + (highlightIdx===i ? 'stroke="var(--ink)" stroke-width="1.5"' : '') + '/>';
+        if(showAllLabels || i === highlightIdx){
+          var ly = Math.max(y(v) - 8, 9);
+          svg += '<text x="'+x(i)+'" y="'+ly+'" font-size="8.5" fill="'+colors[si]+'" font-weight="600" font-family="var(--mono)" text-anchor="middle">'+fmtNum(v)+'</text>';
+        }
       });
     });
     labels.forEach(function(l,i){
@@ -765,13 +770,14 @@
   }
 
   function svgStackedBars(seriesA, seriesB, labels, colorA, colorB, height){
-    height = height || 160;
-    var width = 640, padL = 8, padR = 8, padT = 10, padB = 22;
+    height = height || 175;
+    var width = 640, padL = 8, padR = 8, padT = 16, padB = 22;
     var n = labels.length;
     var maxV = Math.max.apply(null, seriesA.map(function(a,i){ return a + seriesB[i]; }).concat([1])) * 1.1;
     var bw = n > 0 ? Math.min(46, (width-padL-padR)/n - 10) : 20;
     var slot = (width-padL-padR)/Math.max(n,1);
     var svg = '<svg class="chart" viewBox="0 0 ' + width + ' ' + height + '" preserveAspectRatio="none">';
+    var fmtLabel = function(v){ return 'R$' + Math.round(v/1000).toLocaleString('pt-BR') + 'mil'; };
     for(var i=0;i<n;i++){
       var cx = padL + slot*i + slot/2;
       var hA = (seriesA[i]/maxV) * (height-padT-padB);
@@ -779,6 +785,12 @@
       var baseY = height - padB;
       svg += '<rect x="'+(cx-bw/2)+'" y="'+(baseY-hA)+'" width="'+bw+'" height="'+hA+'" fill="'+colorA+'"/>';
       svg += '<rect x="'+(cx-bw/2)+'" y="'+(baseY-hA-hB)+'" width="'+bw+'" height="'+hB+'" fill="'+colorB+'"/>';
+      if(hA > 13){
+        svg += '<text x="'+cx+'" y="'+(baseY-hA/2+3)+'" font-size="8" fill="var(--accent-ink)" font-family="var(--mono)" text-anchor="middle">'+fmtLabel(seriesA[i])+'</text>';
+      }
+      if(hB > 13){
+        svg += '<text x="'+cx+'" y="'+(baseY-hA-hB/2+3)+'" font-size="8" fill="var(--accent-ink)" font-family="var(--mono)" text-anchor="middle">'+fmtLabel(seriesB[i])+'</text>';
+      }
       if(n<=10 || i%Math.ceil(n/10)===0 || i===n-1){
         svg += '<text x="'+cx+'" y="'+(height-6)+'" font-size="9" fill="var(--ink-faint)" font-family="var(--mono)" text-anchor="middle">'+labels[i]+'</text>';
       }
