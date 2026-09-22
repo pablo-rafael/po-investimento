@@ -637,6 +637,7 @@
   // ---------- comparativo ----------
   var featuredKey = null;
   var lastDocs = [];
+  var chartZoom = 1;
 
   function refreshMonthList(){
     if(!db) return;
@@ -729,15 +730,27 @@
     });
   }
 
-  function svgLineChart(series, labels, colors, height, highlightIdx){
+  function svgLineChart(series, labels, colors, height, highlightIdx, zoom){
     height = height || 175;
     var width = 640, padL = 36, padR = 10, padT = 22, padB = 22;
     var allVals = [].concat.apply([], series);
-    var maxV = Math.max.apply(null, allVals.concat([1])) * 1.15;
+    var dataMax = Math.max.apply(null, allVals.concat([1]));
+    var dataMin = Math.min.apply(null, allVals.concat([0]));
+    var range = (dataMax - dataMin) || dataMax || 1;
+    var naturalMin = 0, naturalMax = dataMax * 1.15;
+    var fitMin = dataMin - range*0.12, fitMax = dataMax + range*0.12;
+    var z = Math.min(Math.max(zoom || 1, 1), 6);
+    var t = (z - 1) / 5; // 0 = visão padrão, 1 = ajustado bem próximo aos dados (zoom máximo)
+    var minV = naturalMin + t*(fitMin-naturalMin);
+    var maxV = naturalMax + t*(fitMax-naturalMax);
+    if(maxV <= minV) maxV = minV + 1;
     var n = labels.length;
     var stepX = n > 1 ? (width - padL - padR) / (n-1) : 0;
     var x = function(i){ return padL + i*stepX; };
-    var y = function(v){ return height - padB - (v/maxV) * (height - padT - padB); };
+    var y = function(v){
+      var raw = height - padB - ((v-minV)/(maxV-minV)) * (height - padT - padB);
+      return Math.max(padT, Math.min(height-padB, raw));
+    };
     var svg = '<svg class="chart" viewBox="0 0 ' + width + ' ' + height + '" preserveAspectRatio="none">';
     // grid
     for(var g=0; g<=3; g++){
@@ -827,6 +840,7 @@
 
   function renderComparativo(docs){
     var objEl = document.getElementById('compareObjective');
+    var avgEl = document.getElementById('compareAverages');
     var tiposEl = document.getElementById('compareTipos');
     var inflEl = document.getElementById('compareInfl');
     var encEl = document.getElementById('compareEnc');
@@ -835,7 +849,9 @@
       var msg = docs.length
         ? 'Todos os meses estão ocultos do comparativo. Toque em "exibir" ao lado de um mês na lista acima para incluí-lo.'
         : 'Nenhum mês salvo ainda.';
-      objEl.innerHTML = '<div class="empty">' + msg + '</div>'; tiposEl.innerHTML = ''; inflEl.innerHTML = ''; encEl.innerHTML = '';
+      objEl.innerHTML = '<div class="empty">' + msg + '</div>';
+      avgEl.innerHTML = ''; tiposEl.innerHTML = ''; inflEl.innerHTML = ''; encEl.innerHTML = '';
+      lastObjChart = null;
       return;
     }
     var labels = visibleDocs.map(function(d){ return d.data.label || d.data.key; });
@@ -856,9 +872,25 @@
       function(data){ return { names: data.encNomes || [], rates: data.encRates || []}; },
       function(rT){ return rT.alloc[1]; }, 'capEnc', highlightIdx);
 
-    objEl.innerHTML = '<h2>Resultado ponderado por mês</h2><div class="hint">Comparação entre os três modelos de alocação (meses ocultos não entram aqui).</div>' +
-      svgLineChart([objTipos, inflHist.objectives, encHist.objectives], labels, ['#2fa88f','#d9a72e','#8a7fd6'], null, highlightIdx) +
-      '<div class="legend"><span><span class="dot" style="background:#2fa88f"></span>Modelo A (tipos)</span><span><span class="dot" style="background:#d9a72e"></span>Modelo B (influenciadores)</span><span><span class="dot" style="background:#8a7fd6"></span>Modelo C (encartes)</span></div>';
+    lastObjChart = { series: [objTipos, inflHist.objectives, encHist.objectives], labels: labels, colors: ['#2fa88f','#d9a72e','#8a7fd6'], highlightIdx: highlightIdx };
+    objEl.innerHTML = svgLineChart(lastObjChart.series, lastObjChart.labels, lastObjChart.colors, null, lastObjChart.highlightIdx, chartZoom);
+
+    var avg = function(arr){ return arr.reduce(function(s,v){ return s+v; }, 0) / arr.length; };
+    var statCard = function(label, value){
+      return '<div style="background:var(--panel-alt);border:1px solid var(--line);border-radius:6px;padding:10px 12px;">' +
+        '<div style="font-size:11px;color:var(--ink-dim);margin-bottom:4px;">' + label + '</div>' +
+        '<div style="font-family:var(--mono);font-size:15px;color:var(--ink);">' + value + '</div></div>';
+    };
+    avgEl.innerHTML = '<h2>Média de investimento</h2>' +
+      '<div class="hint">Média dos ' + visibleDocs.length + ' meses exibidos no comparativo (meses ocultos não entram).</div>' +
+      '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-top:8px;">' +
+      statCard('Orçamento médio/mês', fmtMoney(avg(visibleDocs.map(function(d){ return d.data.budget; })))) +
+      statCard('Média p/ Influenciadores', fmtMoney(avg(allocTipos0))) +
+      statCard('Média p/ Encartes', fmtMoney(avg(allocTipos1))) +
+      statCard('Média ponderada — Modelo A', fmtNum(avg(objTipos))) +
+      statCard('Média ponderada — Modelo B', fmtNum(avg(inflHist.objectives))) +
+      statCard('Média ponderada — Modelo C', fmtNum(avg(encHist.objectives))) +
+      '</div>';
 
     tiposEl.innerHTML = '<h2>Divisão do orçamento — Influenciadores × Encartes</h2>' +
       svgStackedBars(allocTipos0, allocTipos1, labels, '#2fa88f', '#d9a72e') +
@@ -867,6 +899,16 @@
     inflEl.innerHTML = inflHist.html;
     encEl.innerHTML = encHist.html;
   }
+
+  var lastObjChart = null;
+  document.getElementById('objZoomSlider').addEventListener('input', function(){
+    chartZoom = parseFloat(this.value) || 1;
+    var lbl = (Math.round(chartZoom*10)/10);
+    document.getElementById('objZoomLabel').textContent = (lbl % 1 === 0 ? lbl.toFixed(0) : lbl.toFixed(1)) + '×';
+    if(lastObjChart){
+      document.getElementById('compareObjective').innerHTML = svgLineChart(lastObjChart.series, lastObjChart.labels, lastObjChart.colors, null, lastObjChart.highlightIdx, chartZoom);
+    }
+  });
 
   // ---------- boot ----------
   loadDataIntoForm(defaultMonthData(initialKey));

@@ -143,7 +143,19 @@
 
   svg.chart{ width:100%; height:auto; display:block; }
   .legend{ display:flex; gap:14px; flex-wrap:wrap; margin-top:8px; font-size:11.5px; color:var(--ink-dim); }
+  .zoom-rail{ flex:none; width:30px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; padding-top:26px; }
+  .zoom-rail input[type="range"]{
+    -webkit-appearance: slider-vertical;
+    writing-mode: vertical-lr;
+    direction: rtl;
+    width: 6px;
+    height: 130px;
+    accent-color: var(--accent);
+    background: transparent;
+  }
+  .zoom-rail .status-bar{ padding:0; font-size:10px; }
   .legend .dot{ width:8px; height:8px; border-radius:2px; display:inline-block; margin-right:5px; vertical-align:middle; }
+
 
   .status-bar{ font-family:var(--mono); font-size:11.5px; color:var(--ink-faint); padding:6px 2px 0 2px; }
   .status-bar.err{ color:var(--danger); }

@@ -155,7 +155,22 @@
       <div id="featuredInfl" style="margin-top:14px;"></div>
       <div id="featuredEnc" style="margin-top:14px;"></div>
     </div>
-    <div class="panel" id="compareObjective"></div>
+    <div class="panel">
+      <div style="display:flex; gap:6px; align-items:stretch;">
+        <div style="flex:1; min-width:0;">
+          <h2>Resultado ponderado por mês</h2>
+          <div class="hint">Comparação entre os três modelos de alocação (meses ocultos não entram aqui).</div>
+          <div id="compareObjective"></div>
+          <div class="legend"><span><span class="dot" style="background:#2fa88f"></span>Modelo A (tipos)</span><span><span class="dot" style="background:#d9a72e"></span>Modelo B (influenciadores)</span><span><span class="dot" style="background:#8a7fd6"></span>Modelo C (encartes)</span></div>
+        </div>
+        <div class="zoom-rail">
+          <span class="status-bar" id="objZoomLabel">1×</span>
+          <input type="range" id="objZoomSlider" min="1" max="6" step="0.5" value="1">
+          <span class="status-bar">zoom</span>
+        </div>
+      </div>
+    </div>
+    <div class="panel" id="compareAverages"></div>
     <div class="panel" id="compareTipos"></div>
     <div class="panel" id="compareInfl"></div>
     <div class="panel" id="compareEnc"></div>
