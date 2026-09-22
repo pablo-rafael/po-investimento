@@ -637,6 +637,7 @@
   // ---------- comparativo ----------
   var featuredKey = null;
   var lastDocs = [];
+  var chartZoom = false;
 
   function refreshMonthList(){
     if(!db) return;
@@ -729,15 +730,26 @@
     });
   }
 
-  function svgLineChart(series, labels, colors, height, highlightIdx){
+  function svgLineChart(series, labels, colors, height, highlightIdx, zoom){
     height = height || 175;
     var width = 640, padL = 36, padR = 10, padT = 22, padB = 22;
     var allVals = [].concat.apply([], series);
-    var maxV = Math.max.apply(null, allVals.concat([1])) * 1.15;
+    var dataMax = Math.max.apply(null, allVals.concat([1]));
+    var dataMin = Math.min.apply(null, allVals.concat([0]));
+    var minV, maxV;
+    if(zoom){
+      var range = (dataMax - dataMin) || dataMax || 1;
+      minV = dataMin - range*0.15;
+      maxV = dataMax + range*0.15;
+    } else {
+      minV = 0;
+      maxV = dataMax * 1.15;
+    }
+    if(maxV <= minV) maxV = minV + 1;
     var n = labels.length;
     var stepX = n > 1 ? (width - padL - padR) / (n-1) : 0;
     var x = function(i){ return padL + i*stepX; };
-    var y = function(v){ return height - padB - (v/maxV) * (height - padT - padB); };
+    var y = function(v){ return height - padB - ((v-minV)/(maxV-minV)) * (height - padT - padB); };
     var svg = '<svg class="chart" viewBox="0 0 ' + width + ' ' + height + '" preserveAspectRatio="none">';
     // grid
     for(var g=0; g<=3; g++){
@@ -857,8 +869,15 @@
       function(rT){ return rT.alloc[1]; }, 'capEnc', highlightIdx);
 
     objEl.innerHTML = '<h2>Resultado ponderado por mês</h2><div class="hint">Comparação entre os três modelos de alocação (meses ocultos não entram aqui).</div>' +
-      svgLineChart([objTipos, inflHist.objectives, encHist.objectives], labels, ['#2fa88f','#d9a72e','#8a7fd6'], null, highlightIdx) +
+      '<div class="chart-wrap">' +
+      svgLineChart([objTipos, inflHist.objectives, encHist.objectives], labels, ['#2fa88f','#d9a72e','#8a7fd6'], null, highlightIdx, chartZoom) +
+      '<div class="zoom-switch" id="zoomSwitch" title="Ampliar a variação entre os meses"><span class="lbl">Zoom</span><span class="track' + (chartZoom?' on':'') + '"><span class="thumb"></span></span></div>' +
+      '</div>' +
       '<div class="legend"><span><span class="dot" style="background:#2fa88f"></span>Modelo A (tipos)</span><span><span class="dot" style="background:#d9a72e"></span>Modelo B (influenciadores)</span><span><span class="dot" style="background:#8a7fd6"></span>Modelo C (encartes)</span></div>';
+    document.getElementById('zoomSwitch').addEventListener('click', function(){
+      chartZoom = !chartZoom;
+      renderComparativo(lastDocs);
+    });
 
     tiposEl.innerHTML = '<h2>Divisão do orçamento — Influenciadores × Encartes</h2>' +
       svgStackedBars(allocTipos0, allocTipos1, labels, '#2fa88f', '#d9a72e') +

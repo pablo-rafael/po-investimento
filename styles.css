@@ -145,6 +145,14 @@
   .legend{ display:flex; gap:14px; flex-wrap:wrap; margin-top:8px; font-size:11.5px; color:var(--ink-dim); }
   .legend .dot{ width:8px; height:8px; border-radius:2px; display:inline-block; margin-right:5px; vertical-align:middle; }
 
+  .chart-wrap{ position:relative; }
+  .zoom-switch{ position:absolute; bottom:2px; right:2px; display:flex; align-items:center; gap:5px; cursor:pointer; user-select:none; }
+  .zoom-switch span.lbl{ font-size:10px; color:var(--ink-faint); font-family:var(--sans); }
+  .zoom-switch .track{ width:28px; height:15px; background:var(--panel-alt); border:1px solid var(--line); border-radius:8px; position:relative; transition:background .15s, border-color .15s; }
+  .zoom-switch .track.on{ background:var(--accent); border-color:var(--accent); }
+  .zoom-switch .thumb{ position:absolute; top:1px; left:1px; width:11px; height:11px; border-radius:50%; background:var(--ink-dim); transition:left .15s, background .15s; }
+  .zoom-switch .track.on .thumb{ left:14px; background:var(--accent-ink); }
+
   .status-bar{ font-family:var(--mono); font-size:11.5px; color:var(--ink-faint); padding:6px 2px 0 2px; }
   .status-bar.err{ color:var(--danger); }
 
