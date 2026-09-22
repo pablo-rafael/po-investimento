@@ -731,7 +731,9 @@
   }
 
   function svgLineChart(series, labels, colors, height, highlightIdx, zoom){
-    height = height || 175;
+    var z = Math.min(Math.max(zoom || 1, 1), 6);
+    var fontScale = 1 + (z - 1) * 0.16; // amplia texto e pontos junto com o zoom
+    height = (height || 175) + (z - 1) * 26; // canvas mais alto = mais espaço pros rótulos
     var width = 640, padL = 36, padR = 10, padT = 22, padB = 22;
     var allVals = [].concat.apply([], series);
     var dataMax = Math.max.apply(null, allVals.concat([1]));
@@ -739,7 +741,6 @@
     var range = (dataMax - dataMin) || dataMax || 1;
     var naturalMin = 0, naturalMax = dataMax * 1.15;
     var fitMin = dataMin - range*0.12, fitMax = dataMax + range*0.12;
-    var z = Math.min(Math.max(zoom || 1, 1), 6);
     var t = (z - 1) / 5; // 0 = visão padrão, 1 = ajustado bem próximo aos dados (zoom máximo)
     var minV = naturalMin + t*(fitMin-naturalMin);
     var maxV = naturalMax + t*(fitMax-naturalMax);
@@ -763,20 +764,20 @@
     var showAllLabels = n <= 6;
     series.forEach(function(s, si){
       var pts = s.map(function(v,i){ return x(i) + ',' + y(v); }).join(' ');
-      svg += '<polyline points="' + pts + '" fill="none" stroke="' + colors[si] + '" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>';
+      svg += '<polyline points="' + pts + '" fill="none" stroke="' + colors[si] + '" stroke-width="' + (2.5*Math.min(fontScale,1.4)) + '" stroke-linejoin="round" stroke-linecap="round"/>';
       s.forEach(function(v,i){
-        var r = (highlightIdx === i) ? 5 : 3;
+        var r = (highlightIdx === i ? 5 : 3) * fontScale;
         svg += '<circle cx="'+x(i)+'" cy="'+y(v)+'" r="'+r+'" fill="'+colors[si]+'" ' + (highlightIdx===i ? 'stroke="var(--ink)" stroke-width="1.5"' : '') + '/>';
         if(showAllLabels || i === highlightIdx){
-          var ly = Math.max(y(v) - 8, 9);
-          svg += '<text x="'+x(i)+'" y="'+ly+'" font-size="8.5" fill="'+colors[si]+'" font-weight="600" font-family="var(--mono)" text-anchor="middle">'+fmtNum(v)+'</text>';
+          var ly = Math.max(y(v) - 8*fontScale, 9*fontScale);
+          svg += '<text x="'+x(i)+'" y="'+ly+'" font-size="'+(8.5*fontScale)+'" fill="'+colors[si]+'" font-weight="600" font-family="var(--mono)" text-anchor="middle">'+fmtNum(v)+'</text>';
         }
       });
     });
     labels.forEach(function(l,i){
       if(n>8 && i%Math.ceil(n/8)!==0 && i!==n-1 && i!==highlightIdx) return;
       var bold = (i===highlightIdx) ? ' font-weight="600" fill="var(--ink)"' : ' fill="var(--ink-faint)"';
-      svg += '<text x="'+x(i)+'" y="'+(height-6)+'" font-size="9"'+bold+' font-family="var(--mono)" text-anchor="middle">'+l+'</text>';
+      svg += '<text x="'+x(i)+'" y="'+(height-6)+'" font-size="'+(9*fontScale)+'"'+bold+' font-family="var(--mono)" text-anchor="middle">'+l+'</text>';
     });
     svg += '</svg>';
     return svg;
