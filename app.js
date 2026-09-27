@@ -411,11 +411,11 @@
     data.weights.forEach(function(w,i){ document.getElementById('weight-'+i).value = w; });
     data.tiposRates.forEach(function(row,r){ row.forEach(function(v,c){ document.getElementById('tipo-'+r+'-'+c).value = blankIfZero(v); }); });
     inflList.render(data.inflNomes, data.inflRates);
-    document.getElementById('capInfl').value = data.capInfl ? blankIfZero(Math.round(100/data.capInfl)) : '';
+    document.getElementById('capInfl').value = blankIfZero(data.capInfl);
     var encNomes = data.encNomes || ENC_DEFAULT_RATES.map(function(_,i){ return 'Encarte ' + String(i+1).padStart(2,'0'); });
     var encRates = data.encRates || ENC_DEFAULT_RATES;
     encList.render(encNomes, encRates);
-    document.getElementById('capEnc').value = data.capEnc ? blankIfZero(Math.round(100/data.capEnc)) : '';
+    document.getElementById('capEnc').value = blankIfZero(data.capEnc);
     updateCapNotes();
   }
 
@@ -433,8 +433,8 @@
       weights: weights,
       capTiposMode: document.getElementById('capTiposMode').value,
       capTiposRaw: parseFloat(document.getElementById('capTipos').value) || 0,
-      capInfl: 100 / Math.min(Math.max(parseInt(document.getElementById('capInfl').value,10) || 5, 1), maxInfl),
-      capEnc: 100 / Math.min(Math.max(parseInt(document.getElementById('capEnc').value,10) || 2, 1), maxEnc),
+      capInfl: Math.max(0, Math.min(parseInt(document.getElementById('capInfl').value,10) || 0, maxInfl)),
+      capEnc: Math.max(0, Math.min(parseInt(document.getElementById('capEnc').value,10) || 0, maxEnc)),
       tiposNomes: TIPO_NAMES.slice(),
       tiposRates: tiposRates,
       inflNomes: inflData.names,
@@ -485,15 +485,17 @@
 
     var tiposRes = currentTiposResult();
 
-    var nInfl = Math.min(Math.max(parseInt(document.getElementById('capInfl').value,10) || 5, 1), Math.max(inflList.currentCount(),1));
+    var nInfl = Math.max(0, Math.min(parseInt(document.getElementById('capInfl').value,10) || 0, Math.max(inflList.currentCount(),1)));
     var inflBudget = tiposRes.alloc[0];
-    var valInfl = nInfl > 0 ? inflBudget / nInfl : 0;
-    document.getElementById('capInflNote').textContent = 'Os ' + nInfl + ' melhores influenciadores recebem até ' + fmtMoney(valInfl) + ' cada, dividindo a verba de ' + fmtMoney(inflBudget) + ' que o Modelo A destina a "Influenciadores".';
+    document.getElementById('capInflNote').textContent = nInfl > 0
+      ? 'Os ' + nInfl + ' melhores influenciadores dividem a verba de ' + fmtMoney(inflBudget) + ' (destinada pelo Modelo A a "Influenciadores") de forma proporcional ao desempenho de cada um — quem performa melhor recebe mais.'
+      : 'Defina quantos dos melhores influenciadores devem dividir a verba de "Influenciadores" (' + fmtMoney(inflBudget) + ').';
 
-    var nEnc = Math.min(Math.max(parseInt(document.getElementById('capEnc').value,10) || 2, 1), Math.max(encList.currentCount(),1));
+    var nEnc = Math.max(0, Math.min(parseInt(document.getElementById('capEnc').value,10) || 0, Math.max(encList.currentCount(),1)));
     var encBudget = tiposRes.alloc[1];
-    var valEnc = nEnc > 0 ? encBudget / nEnc : 0;
-    document.getElementById('capEncNote').textContent = 'Os ' + nEnc + ' melhores encartes recebem até ' + fmtMoney(valEnc) + ' cada, dividindo a verba de ' + fmtMoney(encBudget) + ' que o Modelo A destina a "Encartes".';
+    document.getElementById('capEncNote').textContent = nEnc > 0
+      ? 'Os ' + nEnc + ' melhores encartes dividem a verba de ' + fmtMoney(encBudget) + ' (destinada pelo Modelo A a "Encartes") de forma proporcional ao desempenho de cada um — quem performa melhor recebe mais.'
+      : 'Defina quantos dos melhores encartes devem dividir a verba de "Encartes" (' + fmtMoney(encBudget) + ').';
   }
   ['budget','capTipos','capInfl','capEnc'].forEach(function(id){
     document.getElementById(id).addEventListener('input', updateCapNotes);
@@ -522,6 +524,36 @@
     return { alloc: alloc, coefs: coefs, objective: objective, metricTotals: metricTotals, unallocated: Math.max(remaining,0) };
   }
 
+  // Distribui o orçamento entre os N melhores (por coeficiente), de forma PROPORCIONAL ao desempenho
+  // de cada um — quem performa melhor recebe mais, em vez de todos receberem uma fatia igual.
+  function computeAllocationProportionalTopN(names, rates, weights, budget, topN){
+    var n = names.length;
+    var coefs = rates.map(function(row){
+      return row.reduce(function(s,v,i){ return s + v * (weights[i]||0); }, 0);
+    });
+    var N = Math.max(0, Math.min(Math.round(topN) || 0, n));
+    var order = coefs.map(function(c,i){ return i; }).sort(function(a,b){ return coefs[b]-coefs[a]; });
+    var topIdx = order.slice(0, N);
+    var alloc = new Array(n).fill(0);
+    var allocated = 0;
+    if(N > 0 && budget > 0){
+      var sumCoef = topIdx.reduce(function(s,i){ return s + Math.max(coefs[i], 0); }, 0);
+      if(sumCoef > 0){
+        topIdx.forEach(function(i){ alloc[i] = budget * Math.max(coefs[i],0) / sumCoef; });
+      } else {
+        // todos os N melhores têm coeficiente zero (dados ainda não preenchidos) — divide igualmente como alternativa
+        var each = budget / N;
+        topIdx.forEach(function(i){ alloc[i] = each; });
+      }
+      allocated = budget;
+    }
+    var objective = alloc.reduce(function(s,a,i){ return s + a*coefs[i]; }, 0);
+    var metricTotals = METRICS.map(function(_,mi){
+      return alloc.reduce(function(s,a,i){ return s + a*rates[i][mi]; }, 0);
+    });
+    return { alloc: alloc, coefs: coefs, objective: objective, metricTotals: metricTotals, unallocated: Math.max(budget - allocated, 0) };
+  }
+
   // ---------- results rendering ----------
   function renderResultBlock(containerId, title, names, result, colorClass, subtitle){
     var maxAlloc = Math.max.apply(null, result.alloc.concat([1]));
@@ -544,17 +576,17 @@
     var resTipos = computeAllocation(data.tiposNomes, data.tiposRates, data.weights, data.budget, tiposCapPct(data));
     var inflBudget = resTipos.alloc[0]; // verba que o Modelo A destinou ao tipo "Influenciadores"
     var encBudget = resTipos.alloc[1]; // verba que o Modelo A destinou ao tipo "Encartes"
-    var resInfl = computeAllocation(data.inflNomes, data.inflRates, data.weights, inflBudget, data.capInfl);
-    var resEnc = computeAllocation(data.encNomes, data.encRates, data.weights, encBudget, data.capEnc);
+    var resInfl = computeAllocationProportionalTopN(data.inflNomes, data.inflRates, data.weights, inflBudget, data.capInfl);
+    var resEnc = computeAllocationProportionalTopN(data.encNomes, data.encRates, data.weights, encBudget, data.capEnc);
     // O Modelo A exibe a soma real dos totais dos Modelos B e C, em vez de recalcular pela taxa própria da linha do tipo
     resTipos.metricTotals = METRICS.map(function(_, i){ return (resInfl.metricTotals[i] || 0) + (resEnc.metricTotals[i] || 0); });
     resTipos.objective = resInfl.objective + resEnc.objective;
     renderResultBlock('resultTipos', 'Modelo A — Influenciadores × Encartes', data.tiposNomes, resTipos, true,
       'Os totais de métrica e o total ponderado somam os resultados reais dos Modelos B e C.');
     renderResultBlock('resultInfl', 'Modelo B — influenciadores', data.inflNomes, resInfl, false,
-      'Divide apenas a verba que o Modelo A destinou a "Influenciadores": ' + fmtMoney(inflBudget) + '.');
+      'Divide, de forma proporcional ao desempenho de cada um, a verba que o Modelo A destinou a "Influenciadores": ' + fmtMoney(inflBudget) + '.');
     renderResultBlock('resultEnc', 'Modelo C — encartes', data.encNomes, resEnc, false,
-      'Divide apenas a verba que o Modelo A destinou a "Encartes": ' + fmtMoney(encBudget) + '.');
+      'Divide, de forma proporcional ao desempenho de cada um, a verba que o Modelo A destinou a "Encartes": ' + fmtMoney(encBudget) + '.');
     return {tipos: resTipos, infl: resInfl, enc: resEnc};
   }
 
@@ -656,8 +688,8 @@
     featuredKey = key;
     var resTipos = computeAllocation(data.tiposNomes, data.tiposRates, data.weights, data.budget, tiposCapPct(data));
     var inflBudget = resTipos.alloc[0], encBudget = resTipos.alloc[1];
-    var resInfl = computeAllocation(data.inflNomes, data.inflRates, data.weights, inflBudget, data.capInfl);
-    var resEnc = computeAllocation(data.encNomes || [], data.encRates || [], data.weights, encBudget, data.capEnc);
+    var resInfl = computeAllocationProportionalTopN(data.inflNomes, data.inflRates, data.weights, inflBudget, data.capInfl);
+    var resEnc = computeAllocationProportionalTopN(data.encNomes || [], data.encRates || [], data.weights, encBudget, data.capEnc);
     resTipos.metricTotals = METRICS.map(function(_,i){ return (resInfl.metricTotals[i]||0) + (resEnc.metricTotals[i]||0); });
     resTipos.objective = resInfl.objective + resEnc.objective;
     document.getElementById('featuredMonthPanel').style.display = '';
@@ -818,7 +850,7 @@
       var data = d.data;
       var rT = computeAllocation(data.tiposNomes, data.tiposRates, data.weights, data.budget, tiposCapPct(data));
       var nr = getNomesRates(data);
-      var r = computeAllocation(nr.names, nr.rates, data.weights, getRTAlloc(rT), data[fieldCap]);
+      var r = computeAllocationProportionalTopN(nr.names, nr.rates, data.weights, getRTAlloc(rT), data[fieldCap]);
       var byName = {};
       nr.names.forEach(function(n, idx){ byName[n] = r.alloc[idx] || 0; });
       return { byName: byName, objective: r.objective };
